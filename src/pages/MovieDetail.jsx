@@ -1,0 +1,497 @@
+import { useEffect, useState, useRef } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { posterUrl } from '../lib/tmdb';
+import {
+  getUserAllProgress, getListMovies, getWatchedMovies, getList,
+  getUserLists, addMovieToList, removeMovieFromList, createList, startList,
+  markWatchedStandalone, unmarkWatchedStandalone, getStandaloneWatchedInfo,
+} from '../lib/firestore';
+import StarRating from '../components/StarRating';
+
+export default function MovieDetail() {
+  const { tmdbId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [movie, setMovie] = useState(null);
+  const [fullDetails, setFullDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [myLists, setMyLists] = useState([]); // lists I'm on that contain this movie
+  const [watchedInfo, setWatchedInfo] = useState(null); // { watchedAt, rating, note } or null
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [ownedLists, setOwnedLists] = useState([]); // lists I created
+  const [movieOnLists, setMovieOnLists] = useState(new Set()); // listIds that have this movie
+  const [newListName, setNewListName] = useState('');
+  const [creatingList, setCreatingList] = useState(false);
+  const [standaloneWatched, setStandaloneWatched] = useState(null); // from userWatched doc
+  const [ratingModal, setRatingModal] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [note, setNote] = useState('');
+  const addMenuRef = useRef(null);
+
+  useEffect(() => {
+    loadMovie();
+  }, [tmdbId]);
+
+  useEffect(() => {
+    if (user && tmdbId) loadUserData();
+  }, [user, tmdbId]);
+
+  async function loadMovie() {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${import.meta.env.VITE_TMDB_API_KEY}&append_to_response=credits,recommendations`
+      );
+      const data = await res.json();
+      setFullDetails(data);
+      setMovie({
+        tmdbId: String(data.id),
+        title: data.title,
+        year: data.release_date ? data.release_date.slice(0, 4) : '',
+        posterPath: data.poster_path,
+        overview: data.overview,
+      });
+    } catch (err) {
+      console.error('Failed to load movie:', err);
+    }
+    setLoading(false);
+  }
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    function handleClickOutside(e) {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target)) {
+        setAddMenuOpen(false);
+        setNewListName('');
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [addMenuOpen]);
+
+  async function loadOwnedLists() {
+    const lists = await getUserLists(user.uid);
+    setOwnedLists(lists);
+    // Check which of my lists already have this movie
+    const onLists = new Set();
+    await Promise.all(
+      lists.map(async (l) => {
+        const movies = await getListMovies(l.id);
+        if (movies.some((m) => m.tmdbId === tmdbId)) {
+          onLists.add(l.id);
+        }
+      })
+    );
+    setMovieOnLists(onLists);
+  }
+
+  async function handleToggleList(listId) {
+    if (movieOnLists.has(listId)) {
+      await removeMovieFromList(listId, tmdbId);
+      setMovieOnLists((prev) => { const s = new Set(prev); s.delete(listId); return s; });
+      setMyLists((prev) => prev.filter((l) => l.list.id !== listId));
+    } else {
+      const movieData = {
+        tmdbId,
+        title: movie.title,
+        posterPath: movie.posterPath,
+        year: movie.year,
+        overview: movie.overview || '',
+        genreIds: fullDetails?.genres?.map((g) => g.id) || [],
+      };
+      await addMovieToList(listId, movieData);
+      setMovieOnLists((prev) => new Set(prev).add(listId));
+      // Refresh user data to update "On your lists"
+      loadUserData();
+    }
+  }
+
+  async function handleCreateNewList() {
+    const name = newListName.trim();
+    if (!name || creatingList) return;
+    setCreatingList(true);
+    try {
+      const listId = await createList({ title: name, description: '', createdBy: user.uid });
+      // Auto-start + add movie
+      const movieData = {
+        tmdbId,
+        title: movie.title,
+        posterPath: movie.posterPath,
+        year: movie.year,
+        overview: movie.overview || '',
+        genreIds: fullDetails?.genres?.map((g) => g.id) || [],
+      };
+      await addMovieToList(listId, movieData);
+      await startList(user.uid, listId, name, 1);
+      setNewListName('');
+      setAddMenuOpen(false);
+      // Refresh
+      loadOwnedLists();
+      loadUserData();
+    } finally {
+      setCreatingList(false);
+    }
+  }
+
+  async function loadUserData() {
+    try {
+      const allProgress = await getUserAllProgress(user.uid);
+      const listsWithMovie = [];
+      let foundWatched = null;
+
+      await Promise.all(
+        allProgress.map(async (p) => {
+          const [movies, watched, listDoc] = await Promise.all([
+            getListMovies(p.listId),
+            getWatchedMovies(user.uid, p.listId),
+            getList(p.listId),
+          ]);
+          const hasMovie = movies.some((m) => m.tmdbId === tmdbId);
+          if (hasMovie && listDoc) {
+            listsWithMovie.push({ list: listDoc, progress: p });
+            // Check if watched on this list
+            if (watched[tmdbId] && !foundWatched) {
+              foundWatched = watched[tmdbId];
+            }
+          }
+        })
+      );
+
+      setMyLists(listsWithMovie);
+      setWatchedInfo(foundWatched);
+
+      // Also check standalone watched info
+      const standalone = await getStandaloneWatchedInfo(user.uid, tmdbId);
+      setStandaloneWatched(standalone);
+    } catch (err) {
+      console.error('Failed to load user data:', err);
+    }
+  }
+
+  const isWatched = !!watchedInfo || !!standaloneWatched;
+  const displayRating = watchedInfo?.rating || standaloneWatched?.rating;
+  const displayNote = watchedInfo?.note || standaloneWatched?.note;
+
+  function getMovieData() {
+    return {
+      tmdbId,
+      title: movie?.title,
+      posterPath: movie?.posterPath,
+      year: movie?.year,
+      overview: movie?.overview || '',
+      genreIds: fullDetails?.genres?.map((g) => g.id) || [],
+    };
+  }
+
+  async function handleMarkWatched() {
+    await markWatchedStandalone(user.uid, tmdbId, {
+      rating: rating || null,
+      note: note.trim() || null,
+      movieData: getMovieData(),
+    });
+    setRatingModal(false);
+    loadUserData();
+  }
+
+  async function handleSkipRating() {
+    await markWatchedStandalone(user.uid, tmdbId, {
+      movieData: getMovieData(),
+    });
+    setRatingModal(false);
+    loadUserData();
+  }
+
+  async function handleUnmark() {
+    if (!confirm('Remove watched status? This will remove your standalone review.')) return;
+    await unmarkWatchedStandalone(user.uid, tmdbId);
+    setStandaloneWatched(null);
+    loadUserData();
+  }
+
+  if (loading) {
+    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+  }
+
+  if (!movie || !fullDetails) {
+    return <div className="text-gray-400 text-center py-12">Movie not found.</div>;
+  }
+
+  const directors = fullDetails.credits?.crew?.filter((c) => c.job === 'Director') || [];
+  const cast = fullDetails.credits?.cast?.slice(0, 10) || [];
+  const genres = fullDetails.genres || [];
+  const runtime = fullDetails.runtime;
+  const recommendations = fullDetails.recommendations?.results?.slice(0, 6) || [];
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <button
+        onClick={() => navigate(-1)}
+        className="text-sm text-gray-400 hover:text-white transition-colors"
+      >
+        ← Back
+      </button>
+      <div className="flex gap-6">
+        {movie.posterPath ? (
+          <img
+            src={posterUrl(movie.posterPath, 'w342')}
+            alt=""
+            className="w-40 h-60 rounded-lg object-cover shrink-0"
+          />
+        ) : (
+          <div className="w-40 h-60 rounded-lg bg-gray-800 shrink-0 flex items-center justify-center text-gray-600">
+            No poster
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold text-white">
+            {movie.title} {movie.year && <span className="text-gray-400 font-normal">({movie.year})</span>}
+          </h1>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {genres.map((g) => (
+              <Link key={g.id} to={`/movies?genre=${g.id}`} className="text-xs bg-gray-800 text-gray-300 hover:text-purple-400 hover:bg-gray-700 px-2 py-1 rounded transition-colors">
+                {g.name}
+              </Link>
+            ))}
+          </div>
+          {runtime > 0 && (
+            <p className="text-sm text-gray-400 mt-2">
+              {Math.floor(runtime / 60)}h {runtime % 60}m
+            </p>
+          )}
+          {fullDetails.vote_average > 0 && (
+            <p className="text-sm text-gray-400 mt-1">
+              <span className="text-yellow-400">★</span> {fullDetails.vote_average.toFixed(1)}/10
+              <span className="text-gray-500 ml-1">({fullDetails.vote_count?.toLocaleString()} votes)</span>
+            </p>
+          )}
+          {directors.length > 0 && (
+            <p className="text-sm text-gray-400 mt-2">
+              Directed by <span className="text-white">{directors.map((d) => d.name).join(', ')}</span>
+            </p>
+          )}
+          <p className="text-gray-300 text-sm leading-relaxed hidden sm:block">{movie.overview}</p>
+        </div>
+      </div>
+      {movie.overview && (
+        <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
+      )}
+
+      
+      {/* Watched status + review */}
+      {isWatched && (
+        <div className="bg-purple-600/10 border border-purple-500/30 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center">
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <span className="text-purple-300 text-sm font-medium">Watched</span>
+              {displayRating > 0 && (
+                <span className="ml-2"><StarRating value={displayRating} size="sm" /></span>
+              )}
+            </div>
+            {!watchedInfo && standaloneWatched && (
+              <button
+                onClick={handleUnmark}
+                className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {displayNote && (
+            <p className="text-gray-300 text-sm mt-2 italic">"{displayNote}"</p>
+          )}
+        </div>
+      )}
+
+      
+      {/* Lists I'm on that have this movie */}
+      {myLists.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-gray-400 mb-2">On your lists</h2>
+          <p className="text-sm text-gray-400">
+            {myLists.map(({ list, progress }, i) => (
+              <span key={list.id}>
+                {i > 0 && ', '}
+                <Link to={`/lists/${list.id}`} className="text-gray-300 hover:text-purple-400 transition-colors">
+                  {list.title}
+                </Link>
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
+
+
+      {/* Add to list + Mark watched */}
+      <div className="relative flex items-center gap-2" ref={addMenuRef}>
+        {!isWatched && (
+          <button
+            onClick={() => { setRating(0); setNote(''); setRatingModal(true); }}
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-green-400 border border-gray-700 hover:border-green-500 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            Mark as watched
+          </button>
+        )}
+        
+        <button
+          onClick={() => {
+            if (!addMenuOpen) loadOwnedLists();
+            setAddMenuOpen(!addMenuOpen);
+            setNewListName('');
+          }}
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 border border-gray-700 hover:border-purple-500 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <span className="text-lg leading-none">+</span> Add to new list
+        </button>               
+        
+        {addMenuOpen && (
+          <div className="absolute top-full left-0 mt-2 w-72 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+            {ownedLists.length > 0 && (
+              <div className="max-h-48 overflow-y-auto">
+                {ownedLists.map((l) => {
+                  const isOn = movieOnLists.has(l.id);
+                  return (
+                    <button
+                      key={l.id}
+                      onClick={() => handleToggleList(l.id)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isOn ? 'bg-purple-600 border-purple-600' : 'border-gray-600'}`}>
+                        {isOn && (
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-sm text-white truncate">{l.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="border-t border-gray-700 p-2">
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleCreateNewList(); }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  placeholder="New list name..."
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={!newListName.trim() || creatingList}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Create
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {cast.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-gray-400 mb-2">Cast</h2>
+          <div className="flex flex-wrap gap-2">
+            {cast.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5">
+                {c.profile_path ? (
+                  <img src={posterUrl(c.profile_path, 'w92')} alt="" className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-gray-700" />
+                )}
+                <div>
+                  <span className="text-white text-xs">{c.name}</span>
+                  {c.character && <span className="text-gray-500 text-xs ml-1">as {c.character}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommendations.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-gray-400 mb-2">Similar Movies</h2>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {recommendations.map((r) => (
+              <Link
+                key={r.id}
+                to={`/movie/${r.id}`}
+                className="group"
+              >
+                {r.poster_path ? (
+                  <img
+                    src={posterUrl(r.poster_path, 'w185')}
+                    alt=""
+                    className="w-full rounded-lg object-cover group-hover:ring-2 ring-purple-500 transition-all"
+                  />
+                ) : (
+                  <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-600">
+                    No img
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{r.title}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Rating modal (standalone) */}
+      {ratingModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-white font-medium">Rate this movie</h3>
+            <div className="flex justify-center">
+              <StarRating value={rating} onChange={setRating} size="lg" />
+            </div>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Quick thoughts? (optional)"
+              rows={2}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRatingModal(false)}
+                className="flex-1 text-sm text-gray-500 hover:text-gray-300 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSkipRating}
+                className="flex-1 text-sm text-gray-400 hover:text-white border border-gray-700 py-2 rounded-lg transition-colors"
+              >
+                Mark Watched
+              </button>
+              <button
+                onClick={handleMarkWatched}
+                className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors font-medium"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

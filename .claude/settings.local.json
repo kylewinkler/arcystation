@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(cp -r /c/Users/winks/approot/movies-temp/* /c/Users/winks/approot/movies/)",
+      "Bash(cp /c/Users/winks/approot/movies-temp/.gitignore /c/Users/winks/approot/movies/)",
+      "Bash(cp /c/Users/winks/approot/movies-temp/.eslintrc.cjs /c/Users/winks/approot/movies/)",
+      "Bash(rm -rf /c/Users/winks/approot/movies-temp)",
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)",
+      "Bash(npm run:*)",
+      "Bash(firebase login:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(firebase projects:list)",
+      "Read(//dev/**)",
+      "Bash(\"C:\\\\Users\\\\winks\\\\approot\\\\movies\\\\src\\\\pages\\\\Home.jsx\")",
+      "Bash(find /c/Users/winks/approot/movies/src -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))"
+    ]
+  }
+}
