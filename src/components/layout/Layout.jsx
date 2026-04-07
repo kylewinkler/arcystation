@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ADMIN_UIDS } from '../../lib/admin';
 import FriendRequestBadge from '../friends/FriendRequestBadge';
+import  ArcyPop  from '../../assets/arcy/arcy-popcorn.png'
 
 export default function Layout({ children }) {
   const { user } = useAuth();
@@ -10,9 +11,17 @@ export default function Layout({ children }) {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <nav className="border-b border-gray-800 bg-gray-900">
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-white hover:text-purple-400 transition-colors">
-            Film Freaks
-          </Link>
+        <Link
+          to="/"
+          className="flex items-center gap-2 text-xl font-bold text-white hover:text-purple-400 transition-colors"
+        >
+          <img
+          src={ArcyPop}
+          alt="arcy logo popcorn"
+          className="h-9 w-auto -translate-y-[1px]"
+        />
+          Arcy Station
+        </Link>
           {user && (
             <div className="flex items-center gap-4">
               <Link to="/movies" className="text-sm text-gray-300 hover:text-white transition-colors">

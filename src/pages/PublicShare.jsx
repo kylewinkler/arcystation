@@ -46,7 +46,7 @@ export default function PublicShare() {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
         <div>
-          <p className="text-sm text-purple-400 mb-1">Film Freaks</p>
+          <p className="text-sm text-purple-400 mb-1">Arcy Station</p>
           <h1 className="text-2xl font-bold text-white">{list.title}</h1>
           {list.description && <p className="text-gray-400 mt-1">{list.description}</p>}
           <p className="text-sm text-gray-500 mt-2">{movies.length} movies</p>

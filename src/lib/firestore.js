@@ -194,30 +194,14 @@ export async function getListStarters(listId) {
 export async function markWatched(uid, listId, tmdbId, { rating, note, movieData } = {}) {
   const progressId = progressDocId(uid, listId);
   const watchRef = doc(db, 'userProgress', progressId, 'watched', tmdbId);
-  await setDoc(watchRef, {
-    watchedAt: serverTimestamp(),
-    ...(rating != null && { rating }),
-    ...(note != null && { note }),
-  });
+  // Per-list: just a flag
+  await setDoc(watchRef, { watchedAt: serverTimestamp() });
   await updateDoc(doc(db, 'userProgress', progressId), {
     watchedCount: increment(1),
     lastActivityAt: serverTimestamp(),
   });
-  // Keep global watched set in sync (one doc per user, fast lookups)
-  await setDoc(doc(db, 'userWatched', uid), { tmdbIds: arrayUnion(tmdbId) }, { merge: true });
-
-  // Store movie metadata for year filtering (single doc, no API calls needed later)
-  if (movieData) {
-    await updateDoc(doc(db, 'userWatched', uid), {
-      [`movies.${tmdbId}`]: {
-        title: movieData.title || '',
-        year: movieData.year || '',
-        posterPath: movieData.posterPath || null,
-        ...(movieData.genreIds?.length > 0 && { genreIds: movieData.genreIds }),
-      },
-    });
-  }
-
+  // Global: rating/note/metadata all live here
+  await markWatchedStandalone(uid, tmdbId, { rating, note, movieData });
 }
 
 export async function unmarkWatched(uid, listId, tmdbId) {
@@ -226,12 +210,8 @@ export async function unmarkWatched(uid, listId, tmdbId) {
   await updateDoc(doc(db, 'userProgress', progressId), {
     watchedCount: increment(-1),
   });
-  // Remove from global set (note: if same movie watched on another list, this is slightly aggressive
-  // but for <100 users it's fine — the per-list watched subcollections remain the source of truth)
-  await setDoc(doc(db, 'userWatched', uid), { tmdbIds: arrayRemove(tmdbId) }, { merge: true });
-  try {
-    await updateDoc(doc(db, 'userWatched', uid), { [`movies.${tmdbId}`]: deleteField() });
-  } catch (e) { /* doc may not have movies map yet */ }
+  // Don't touch userWatched — the global review stays.
+  // unmarkWatchedStandalone handles full removal from the movie page.
 }
 
 export async function getWatchedMovies(uid, listId) {
@@ -258,22 +238,21 @@ export function subscribeToWatched(uid, listId, callback) {
 // ── Standalone watched (no list) ──
 
 export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieData } = {}) {
-  await setDoc(doc(db, 'userWatched', uid), {
-    tmdbIds: arrayUnion(tmdbId),
-  }, { merge: true });
+  await setDoc(doc(db, 'userWatched', uid), { tmdbIds: arrayUnion(tmdbId) }, { merge: true });
+  const entry = { watchedAt: serverTimestamp() };
   if (movieData) {
-    await updateDoc(doc(db, 'userWatched', uid), {
-      [`movies.${tmdbId}`]: {
-        title: movieData.title || '',
-        year: movieData.year || '',
-        posterPath: movieData.posterPath || null,
-        ...(movieData.genreIds?.length > 0 && { genreIds: movieData.genreIds }),
-        ...(rating != null && { rating }),
-        ...(note != null && { note }),
-        watchedAt: serverTimestamp(),
-      },
-    });
+    entry.title = movieData.title || '';
+    entry.year = movieData.year || '';
+    entry.posterPath = movieData.posterPath || null;
+    if (movieData.genreIds?.length > 0) entry.genreIds = movieData.genreIds;
   }
+  if (rating != null) entry.rating = rating;
+  if (note != null) entry.note = note;
+  // Merge so we don't wipe fields set by a previous call
+  const ref = doc(db, 'userWatched', uid);
+  const snap = await getDoc(ref);
+  const existing = snap.exists() ? snap.data().movies?.[tmdbId] || {} : {};
+  await updateDoc(ref, { [`movies.${tmdbId}`]: { ...existing, ...entry } });
 }
 
 export async function unmarkWatchedStandalone(uid, tmdbId) {
@@ -283,12 +262,10 @@ export async function unmarkWatchedStandalone(uid, tmdbId) {
   } catch (e) { /* doc may not have movies map yet */ }
 }
 
-export async function getStandaloneWatchedInfo(uid, tmdbId) {
+export async function getWatchedInfo(uid, tmdbId) {
   const snap = await getDoc(doc(db, 'userWatched', uid));
   if (!snap.exists()) return null;
-  const movie = snap.data().movies?.[tmdbId];
-  if (!movie?.watchedAt) return null;
-  return movie;
+  return snap.data().movies?.[tmdbId] || null;
 }
 
 // Get all tmdbIds a user has watched across ALL their lists (single doc read)

@@ -7,6 +7,8 @@ import {
 } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
+import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
 
 function pickRandom(arr) {
   return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
@@ -147,7 +149,7 @@ export default function Home() {
   }
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   return (
@@ -290,7 +292,7 @@ export default function Home() {
         return (
           <>
             {paginated.length === 0 ? (
-              <p className="text-gray-500 text-sm text-center py-6">No lists match your search.</p>
+              <NotFound title={<>Arcy remembers… something used to be here. <br />But what?</>} />
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {paginated.map((item) => (

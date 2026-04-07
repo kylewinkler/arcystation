@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   subscribeToList, subscribeToListMovies, getListStarters,
   startList, getProgress, deleteList, enablePublicShare, disablePublicShare, setFeaturedMovie,
-  getUserProfile, getAllWatchedTmdbIds,
+  getUserProfile, getAllWatchedTmdbIds, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
 } from '../lib/firestore';
 import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
@@ -12,6 +12,7 @@ import { db } from '../lib/firebase';
 import MovieCard from '../components/movies/MovieCard';
 import ProgressBar from '../components/lists/ProgressBar';
 import StarRating from '../components/StarRating';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function ListDetail() {
   const { id } = useParams();
@@ -148,9 +149,11 @@ export default function ListDetail() {
 
   const handleToggleWatched = async (tmdbId, shouldWatch) => {
     if (shouldWatch) {
+      // Pre-fill with existing review if they've watched this before
+      const existing = await getWatchedInfo(user.uid, tmdbId);
+      setRating(existing?.rating || 0);
+      setNote(existing?.note || '');
       setRatingModal(tmdbId);
-      setRating(0);
-      setNote('');
     } else {
       setUnmarkModal(tmdbId);
     }
@@ -192,7 +195,7 @@ export default function ListDetail() {
   };
 
   if (loading && !list) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   if (!list) {

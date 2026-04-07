@@ -8,6 +8,7 @@ import {
 } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
+import LoadingScreen from '../components/loading/Loading';
 
 function CollapsibleSection({ title, count, defaultOpen = true, children, rightAction }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -123,7 +124,7 @@ export default function UserProfile() {
   }
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   if (!profile) {

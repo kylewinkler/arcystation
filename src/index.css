@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+@theme {
+  --color-space-bg: #1A0F2E;
+  --color-space-card: #24133F;
+  --color-space-elevated: #2D1B4E;
+  --color-space-border: #3A2A5E;
+
+  --color-brand-purple: #6C4DD9;
+  --color-brand-violet: #8B6CF0;
+  --color-brand-blue: #3B82F6;
+  --color-brand-cyan: #22D3EE;
+
+  --color-star: #FFD84D;
+  --color-star-glow: #FFE97A;
+
+  --color-ui-text: #E5E7EB;
+  --color-ui-muted: #9CA3AF;
+
+  --color-teal: #14B8A6;
+  --color-teal-soft: #2DD4BF;
+
+  --animate-float: float 3.2s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-12px);
+    }
+  }
+}

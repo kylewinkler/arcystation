@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { searchMovies, discoverMovies, getGenreList, posterUrl } from '../lib/tmdb';
 import { getAllWatchedTmdbIds } from '../lib/firestore';
+import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
 
 const TABS = [
   { key: 'popular', label: 'Popular' },
@@ -140,9 +142,9 @@ export default function Movies() {
 
       {/* Results */}
       {loading ? (
-        <div className="text-gray-400 text-center py-12">Loading...</div>
+        <LoadingScreen />
       ) : movies.length === 0 ? (
-        <div className="text-gray-500 text-center py-12">No movies found.</div>
+        <NotFound image='screen' title='The projector hums, Arcy stares at the screen. Nothing' />
       ) : (
         <>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">

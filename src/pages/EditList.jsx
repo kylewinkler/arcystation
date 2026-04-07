@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { getList, getListMovies, updateList, addMovieToList, removeMovieFromList } from '../lib/firestore';
 import MovieSearch from '../components/movies/MovieSearch';
 import { posterUrl } from '../lib/tmdb';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function EditList() {
   const { id } = useParams();
@@ -66,7 +67,7 @@ export default function EditList() {
   };
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   return (

@@ -6,6 +6,7 @@ import {
   searchUsersByName, sendFriendRequest, acceptFriendRequest, removeFriend,
   getSuggestedFriends, getFriendship,
 } from '../lib/firestore';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function Friends() {
   const { user } = useAuth();
@@ -103,7 +104,7 @@ export default function Friends() {
   };
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   const incomingRequests = pending.filter((r) => r.requestedBy !== user.uid);

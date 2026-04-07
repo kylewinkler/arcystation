@@ -3,13 +3,14 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   subscribeToProgress, subscribeToListMovies, subscribeToWatched,
-  markWatched, unmarkWatched, getUserProfile, getList, deleteList,
+  markWatched, unmarkWatched, getUserProfile, getList, deleteList, getWatchedInfo,
 } from '../lib/firestore';
 import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import MovieCard from '../components/movies/MovieCard';
 import ProgressBar from '../components/lists/ProgressBar';
 import StarRating from '../components/StarRating';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function ProgressView() {
   const { uid, listId } = useParams();
@@ -44,9 +45,10 @@ export default function ProgressView() {
 
   const handleToggleWatched = async (tmdbId, shouldWatch) => {
     if (shouldWatch) {
+      const existing = await getWatchedInfo(uid, tmdbId);
+      setRating(existing?.rating || 0);
+      setNote(existing?.note || '');
       setRatingModal(tmdbId);
-      setRating(0);
-      setNote('');
     } else {
       await unmarkWatched(uid, listId, tmdbId);
     }
@@ -88,7 +90,7 @@ export default function ProgressView() {
   };
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   if (!progress) {

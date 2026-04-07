@@ -5,9 +5,10 @@ import { posterUrl } from '../lib/tmdb';
 import {
   getUserAllProgress, getListMovies, getWatchedMovies, getList,
   getUserLists, addMovieToList, removeMovieFromList, createList, startList,
-  markWatchedStandalone, unmarkWatchedStandalone, getStandaloneWatchedInfo,
+  markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
 } from '../lib/firestore';
 import StarRating from '../components/StarRating';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function MovieDetail() {
   const { tmdbId } = useParams();
@@ -163,7 +164,7 @@ export default function MovieDetail() {
       setWatchedInfo(foundWatched);
 
       // Also check standalone watched info
-      const standalone = await getStandaloneWatchedInfo(user.uid, tmdbId);
+      const standalone = await getWatchedInfo(user.uid, tmdbId);
       setStandaloneWatched(standalone);
     } catch (err) {
       console.error('Failed to load user data:', err);
@@ -211,7 +212,7 @@ export default function MovieDetail() {
   }
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   if (!movie || !fullDetails) {

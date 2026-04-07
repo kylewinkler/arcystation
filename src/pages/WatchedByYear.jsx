@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getUserProfile, getAllWatchedMovies } from '../lib/firestore';
 import { getGenreList, posterUrl } from '../lib/tmdb';
 import { useAuth } from '../context/AuthContext';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function WatchedByYear() {
   const { uid, year: urlYear } = useParams();
@@ -67,7 +68,7 @@ export default function WatchedByYear() {
   };
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen/>;
   }
 
   const yearLabel = selectedYear === 'all' ? '' : ` ${selectedYear}`;

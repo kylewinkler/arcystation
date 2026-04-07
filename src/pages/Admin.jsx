@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { getUserLists, getListMovies } from '../lib/firestore';
 
 import { ADMIN_UIDS } from '../lib/admin';
+import LoadingScreen from '../components/loading/Loading';
 
 export default function Admin() {
   const { user } = useAuth();
@@ -53,9 +54,11 @@ export default function Admin() {
         const watchedSnap = await getDocs(collection(db, 'userProgress', pDoc.id, 'watched'));
         if (watchedSnap.empty) continue;
         if (!byUser[p.uid]) byUser[p.uid] = [];
+        const watchedEntries = {};
+        watchedSnap.docs.forEach((d) => { watchedEntries[d.id] = d.data(); });
         byUser[p.uid].push({
           listId: p.listId,
-          watchedIds: watchedSnap.docs.map((d) => d.id),
+          watchedEntries,
         });
       }
 
@@ -66,21 +69,21 @@ export default function Admin() {
         const allTmdbIds = [];
         const moviesMap = {};
 
-        for (const { listId, watchedIds } of entries) {
-          // Get movie metadata from the list
+        for (const { listId, watchedEntries } of entries) {
           const listMovies = await getListMovies(listId);
           const movieLookup = {};
           listMovies.forEach((m) => { movieLookup[m.tmdbId] = m; });
 
-          for (const tmdbId of watchedIds) {
+          for (const [tmdbId, watchData] of Object.entries(watchedEntries)) {
             allTmdbIds.push(tmdbId);
             const m = movieLookup[tmdbId];
-            if (m && !moviesMap[tmdbId]) {
+            if (!moviesMap[tmdbId]) {
               moviesMap[tmdbId] = {
-                title: m.title || '',
-                year: m.year || '',
-                posterPath: m.posterPath || null,
-                ...(m.genreIds?.length > 0 && { genreIds: m.genreIds }),
+                ...(m && { title: m.title || '', year: m.year || '', posterPath: m.posterPath || null }),
+                ...(m?.genreIds?.length > 0 && { genreIds: m.genreIds }),
+                ...(watchData.rating != null && { rating: watchData.rating }),
+                ...(watchData.note != null && { note: watchData.note }),
+                ...(watchData.watchedAt && { watchedAt: watchData.watchedAt }),
               };
               moviesBackfilled++;
             }
@@ -117,7 +120,7 @@ export default function Admin() {
     : users;
 
   if (loading) {
-    return <div className="text-gray-400 text-center py-12">Loading...</div>;
+    return <LoadingScreen />;
   }
 
   return (

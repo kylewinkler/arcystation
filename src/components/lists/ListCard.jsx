@@ -33,6 +33,13 @@ export default function ListCard({
       <div className="flex-1 min-w-0 p-4">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 min-w-0">
+            <h3 className="text-white font-medium truncate">{title}</h3>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isOwner && <span className="text-xs text-purple-400">yours</span>}
+            {!isOwner && creatorName && (
+              <span className="text-xs text-gray-500">by {creatorName}</span>
+            )}
             {onTogglePin && (
               <button
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(listId); }}
@@ -43,13 +50,6 @@ export default function ListCard({
                   <path d="M12 2L9.5 8.5L3 10l5 4.5L6.5 21L12 17.5L17.5 21L16 14.5L21 10l-6.5-1.5L12 2z" />
                 </svg>
               </button>
-            )}
-            <h3 className="text-white font-medium truncate">{title}</h3>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {isOwner && <span className="text-xs text-purple-400">yours</span>}
-            {!isOwner && creatorName && (
-              <span className="text-xs text-gray-500">by {creatorName}</span>
             )}
           </div>
         </div>
