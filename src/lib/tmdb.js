@@ -65,6 +65,12 @@ export async function discoverMovies({ tab = 'popular', genre, year, page = 1 } 
   };
 }
 
+export async function getRecommendations(tmdbId) {
+  const res = await fetch(`${BASE_URL}/movie/${tmdbId}/recommendations?api_key=${API_KEY}`);
+  const data = await res.json();
+  return mapMovieResults(data.results);
+}
+
 export async function getMovieDetails(tmdbId) {
   const res = await fetch(`${BASE_URL}/movie/${tmdbId}?api_key=${API_KEY}`);
   const m = await res.json();

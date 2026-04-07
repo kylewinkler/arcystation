@@ -1,13 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { searchMovies, discoverMovies, getGenreList, posterUrl } from '../lib/tmdb';
-import { getAllWatchedTmdbIds } from '../lib/firestore';
+import { searchMovies, discoverMovies, getGenreList, getRecommendations, posterUrl } from '../lib/tmdb';
+import { getAllWatchedTmdbIds, getAllWatchedMovies } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
-import { DISCOVER_NO_RESULTS } from '../lib/copy/empty';
+import { DISCOVER_NO_RESULTS, WATCHED_NO_MATCHES, WATCHED_NONE } from '../lib/copy/empty';
+import StarRating from '../components/StarRating';
+import SuggestionCard from '../components/movies/SuggestionCard';
 
-const TABS = [
+const DISCOVER_TABS = [
   { key: 'popular', label: 'Popular' },
   { key: 'top_rated', label: 'Top Rated' },
   { key: 'now_playing', label: 'Now Playing' },
@@ -15,20 +17,36 @@ const TABS = [
 
 export default function Movies() {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialGenre = searchParams.get('genre') || '';
-  const [tab, setTab] = useState('popular');
-  const [movies, setMovies] = useState([]);
+  const initialSection = searchParams.get('section') || 'discover';
+
+  // Top-level section
+  const [section, setSection] = useState(initialSection);
+
+  // ── Discover state ──
+  const [discoverTab, setDiscoverTab] = useState('popular');
+  const [discoverMovies_, setDiscoverMovies] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [discoverLoading, setDiscoverLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [search, setSearch] = useState('');
-  const [genre, setGenre] = useState(initialGenre);
-  const [year, setYear] = useState('');
+  const [discoverSearch, setDiscoverSearch] = useState('');
+  const [discoverGenre, setDiscoverGenre] = useState(initialGenre);
   const [genres, setGenres] = useState({});
   const [watched, setWatched] = useState(new Set());
-  const debounceRef = useRef(null);
+  const [recs, setRecs] = useState([]);
+  const [recsLoaded, setRecsLoaded] = useState(false);
+  const [recSeedTitle, setRecSeedTitle] = useState('');
+  const discoverDebounce = useRef(null);
+
+  // ── Watched state ──
+  const [watchedMovies, setWatchedMovies] = useState([]);
+  const [watchedLoading, setWatchedLoading] = useState(false);
+  const [watchedLoaded, setWatchedLoaded] = useState(false);
+  const [watchedSearch, setWatchedSearch] = useState('');
+  const [watchedYear, setWatchedYear] = useState('all');
+  const [watchedGenre, setWatchedGenre] = useState('');
 
   // Load genres + watched set once
   useEffect(() => {
@@ -36,172 +54,366 @@ export default function Movies() {
     if (user) getAllWatchedTmdbIds(user.uid).then(setWatched);
   }, [user]);
 
-  // Reload on tab/filter change
+  // Load recs from highest-rated watched movie
   useEffect(() => {
-    if (search.trim()) return; // search handles its own loading
+    if (!user || recsLoaded) return;
+    getAllWatchedMovies(user.uid).then(async (movies) => {
+      if (movies.length === 0) { setRecsLoaded(true); return; }
+      // Sort by rating desc, then pick the top-rated
+      const rated = movies.filter((m) => m.rating > 0).sort((a, b) => b.rating - a.rating);
+      const seed = rated[0] || movies[Math.floor(Math.random() * movies.length)];
+      if (!seed?.tmdbId) { setRecsLoaded(true); return; }
+      try {
+        const results = await getRecommendations(seed.tmdbId);
+        // Filter out movies the user already watched
+        const unseen = results.filter((m) => !watched.has(m.tmdbId));
+        setRecs(unseen.slice(0, 10));
+        setRecSeedTitle(seed.title || '');
+      } catch (err) {
+        console.error('Failed to load recs:', err);
+      }
+      setRecsLoaded(true);
+    });
+  }, [user, watched]);
+
+  // ── Discover effects ──
+  useEffect(() => {
+    if (section !== 'discover') return;
+    if (discoverSearch.trim()) return;
     setPage(1);
     loadDiscover(1, false);
-  }, [tab, genre, year]);
+  }, [discoverTab, discoverGenre, section]);
 
-  // Search with debounce
   useEffect(() => {
-    clearTimeout(debounceRef.current);
-    if (!search.trim()) {
+    if (section !== 'discover') return;
+    clearTimeout(discoverDebounce.current);
+    if (!discoverSearch.trim()) {
       loadDiscover(1, false);
       return;
     }
-    debounceRef.current = setTimeout(() => {
-      loadSearch();
-    }, 300);
-  }, [search]);
+    discoverDebounce.current = setTimeout(() => loadSearch(), 300);
+  }, [discoverSearch]);
 
   async function loadDiscover(pg, append) {
-    if (!append) setLoading(true);
+    if (!append) setDiscoverLoading(true);
     else setLoadingMore(true);
     try {
-      const result = await discoverMovies({ tab, genre, year, page: pg });
-      setMovies(append ? (prev) => [...prev, ...result.movies] : result.movies);
+      const result = await discoverMovies({ tab: discoverTab, genre: discoverGenre, page: pg });
+      setDiscoverMovies(append ? (prev) => [...prev, ...result.movies] : result.movies);
       setTotalPages(result.totalPages);
       setPage(pg);
     } catch (err) {
       console.error('Failed to load movies:', err);
     }
-    setLoading(false);
+    setDiscoverLoading(false);
     setLoadingMore(false);
   }
 
   async function loadSearch() {
-    setLoading(true);
+    setDiscoverLoading(true);
     try {
-      const results = await searchMovies(search, { year: year || undefined });
-      setMovies(results);
+      const results = await searchMovies(discoverSearch);
+      setDiscoverMovies(results);
       setTotalPages(1);
       setPage(1);
     } catch (err) {
       console.error('Search failed:', err);
     }
-    setLoading(false);
+    setDiscoverLoading(false);
   }
 
   function handleLoadMore() {
-    if (search.trim()) return; // no pagination for search
+    if (discoverSearch.trim()) return;
     loadDiscover(page + 1, true);
   }
 
-  const currentYear = new Date().getFullYear();
-  const yearOptions = [];
-  for (let y = currentYear; y >= 1920; y--) yearOptions.push(y);
+  // ── Watched effects ──
+  useEffect(() => {
+    if (section !== 'watched' || watchedLoaded || !user) return;
+    setWatchedLoading(true);
+    getAllWatchedMovies(user.uid).then((movies) => {
+      setWatchedMovies(movies);
+      setWatchedLoaded(true);
+      setWatchedLoading(false);
+    });
+  }, [section, user]);
+
+  // Watched filtering
+  const watchedYearSet = new Set();
+  watchedMovies.forEach((m) => { if (m.year) watchedYearSet.add(String(m.year)); });
+  const watchedYears = [...watchedYearSet].sort((a, b) => b - a);
+
+  const watchedYearFiltered = watchedYear === 'all'
+    ? watchedMovies
+    : watchedMovies.filter((m) => String(m.year) === watchedYear);
+
+  const watchedAvailableGenres = {};
+  watchedYearFiltered.forEach((m) => {
+    (m.genreIds || []).forEach((gid) => {
+      if (genres[gid]) watchedAvailableGenres[gid] = genres[gid];
+    });
+  });
+  const watchedSortedGenres = Object.entries(watchedAvailableGenres).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const watchedFiltered = watchedYearFiltered.filter((m) => {
+    if (watchedSearch && !m.title.toLowerCase().includes(watchedSearch.toLowerCase())) return false;
+    if (watchedGenre && !(m.genreIds || []).includes(Number(watchedGenre))) return false;
+    return true;
+  });
+
+  // Section switching
+  function switchSection(s) {
+    setSection(s);
+    const params = new URLSearchParams(searchParams);
+    if (s === 'discover') {
+      params.delete('section');
+    } else {
+      params.set('section', s);
+    }
+    setSearchParams(params, { replace: true });
+  }
 
   const genreEntries = Object.entries(genres).sort((a, b) => a[1].localeCompare(b[1]));
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
-      <h1 className="text-2xl font-bold text-white">Discover</h1>
+      <h1 className="text-2xl font-bold text-white">Movies</h1>
 
-      {/* Search */}
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search movies..."
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
-      />
-
-      {/* Tabs (hidden when searching) */}
-      {!search.trim() && (
-        <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                tab === t.key
-                  ? 'bg-purple-600 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex gap-2">
-        <select
-          value={genre}
-          onChange={(e) => { setGenre(e.target.value); setSearch(''); }}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+      {/* Top-level tabs */}
+      <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
+        <button
+          onClick={() => switchSection('discover')}
+          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+            section === 'discover' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
+          }`}
         >
-          <option value="">All genres</option>
-          {genreEntries.map(([id, name]) => (
-            <option key={id} value={id}>{name}</option>
-          ))}
-        </select>
-
+          Discover
+        </button>
+        <button
+          onClick={() => switchSection('watched')}
+          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+            section === 'watched' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Watched
+          {watched.size > 0 && (
+            <span className="ml-1.5 text-xs text-purple-200/60">{watched.size}</span>
+          )}
+        </button>
       </div>
 
-      {/* Results */}
-      {loading ? (
-        <LoadingScreen />
-      ) : movies.length === 0 ? (
-        <NotFound title={DISCOVER_NO_RESULTS.title} subtitle={DISCOVER_NO_RESULTS.subtitle} scene={DISCOVER_NO_RESULTS.scene} />
-      ) : (
+      {/* ════════ DISCOVER SECTION ════════ */}
+      {section === 'discover' && (
         <>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-            {movies.map((m) => {
-              const isSeen = watched.has(m.tmdbId);
-              return (
-                <Link
-                  key={m.tmdbId}
-                  to={`/movie/${m.tmdbId}`}
-                  className="group relative"
+          {/* You might like */}
+          {recs.length > 0 && !discoverSearch.trim() && (
+            <SuggestionCard
+              movie={recs[0]}
+              label="You might like"
+              labelColor="text-purple-400/80"
+              sublabel={recSeedTitle ? `because you liked ${recSeedTitle}` : undefined}
+            />
+          )}
+
+          {/* Search */}
+          <input
+            type="text"
+            value={discoverSearch}
+            onChange={(e) => setDiscoverSearch(e.target.value)}
+            placeholder="Search movies..."
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
+          />
+
+          {/* Sub-tabs */}
+          {!discoverSearch.trim() && (
+            <div className="flex gap-1 bg-gray-800/50 rounded-lg p-1">
+              {DISCOVER_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setDiscoverTab(t.key)}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    discoverTab === t.key
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-500 hover:text-white'
+                  }`}
                 >
-                  {m.posterPath ? (
-                    <img
-                      src={posterUrl(m.posterPath, 'w185')}
-                      alt=""
-                      className={`w-full aspect-[2/3] rounded-lg object-cover transition-all group-hover:ring-2 ring-purple-500 ${
-                        isSeen ? 'ring-1 ring-green-500/40' : ''
-                      }`}
-                    />
-                  ) : (
-                    <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-600">
-                      No img
-                    </div>
-                  )}
-                  {isSeen && (
-                    <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-green-600 flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-400 mt-1.5 truncate group-hover:text-white transition-colors">
-                    {m.title}
-                  </p>
-                  {m.year && (
-                    <p className="text-xs text-gray-600">{m.year}</p>
-                  )}
-                </Link>
-              );
-            })}
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Genre filter */}
+          <div className="flex gap-2">
+            <select
+              value={discoverGenre}
+              onChange={(e) => { setDiscoverGenre(e.target.value); setDiscoverSearch(''); }}
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+            >
+              <option value="">All genres</option>
+              {genreEntries.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
           </div>
 
-          {/* Load more */}
-          {!search.trim() && page < totalPages && (
-            <div className="text-center pt-2 pb-4">
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="text-sm text-purple-400 hover:text-purple-300 border border-gray-700 hover:border-purple-500 px-6 py-2 rounded-lg transition-colors disabled:text-gray-600"
-              >
-                {loadingMore ? 'Loading...' : 'Load more'}
-              </button>
-            </div>
+          {/* Results */}
+          {discoverLoading ? (
+            <LoadingScreen />
+          ) : discoverMovies_.length === 0 ? (
+            <NotFound title={DISCOVER_NO_RESULTS.title} subtitle={DISCOVER_NO_RESULTS.subtitle} scene={DISCOVER_NO_RESULTS.scene} />
+          ) : (
+            <>
+              <MovieGrid movies={discoverMovies_} watched={watched} />
+              {!discoverSearch.trim() && page < totalPages && (
+                <div className="text-center pt-2 pb-4">
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="text-sm text-purple-400 hover:text-purple-300 border border-gray-700 hover:border-purple-500 px-6 py-2 rounded-lg transition-colors disabled:text-gray-600"
+                  >
+                    {loadingMore ? 'Loading...' : 'Load more'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
+
+      {/* ════════ WATCHED SECTION ════════ */}
+      {section === 'watched' && (
+        <>
+          {watchedLoading ? (
+            <LoadingScreen />
+          ) : (
+            <>
+              {/* Filters */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={watchedSearch}
+                  onChange={(e) => setWatchedSearch(e.target.value)}
+                  placeholder="Search your watched..."
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500"
+                />
+                <select
+                  value={watchedYear}
+                  onChange={(e) => { setWatchedYear(e.target.value); setWatchedGenre(''); }}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                >
+                  <option value="all">All years</option>
+                  {watchedYears.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                {watchedSortedGenres.length > 0 && (
+                  <select
+                    value={watchedGenre}
+                    onChange={(e) => setWatchedGenre(e.target.value)}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="">All genres</option>
+                    {watchedSortedGenres.map(([gid, name]) => (
+                      <option key={gid} value={gid}>{name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Count */}
+              {(watchedSearch || watchedGenre) && (
+                <p className="text-sm text-gray-500">
+                  Showing {watchedFiltered.length} of {watchedYearFiltered.length}
+                </p>
+              )}
+
+              {/* Grid */}
+              {watchedFiltered.length > 0 ? (
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
+                  {watchedFiltered.map((m) => (
+                    <Link
+                      key={m.tmdbId}
+                      to={`/movie/${m.tmdbId}`}
+                      className="group"
+                      title={m.title}
+                    >
+                      {m.posterPath ? (
+                        <img
+                          src={posterUrl(m.posterPath, 'w185')}
+                          alt={m.title}
+                          className="w-full aspect-[2/3] rounded-lg object-cover ring-1 ring-purple-500/30 group-hover:ring-purple-500 transition-all"
+                        />
+                      ) : (
+                        <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 ring-1 ring-purple-500/30 flex items-center justify-center">
+                          <span className="text-xs text-gray-500 text-center leading-tight px-2">{m.title}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1 truncate">{m.title}</p>
+                      {m.rating > 0 && (
+                        <div className="mt-0.5">
+                          <StarRating value={m.rating} size="sm" />
+                        </div>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <NotFound
+                  title={watchedSearch || watchedGenre ? WATCHED_NO_MATCHES.title : WATCHED_NONE.title}
+                  subtitle={watchedSearch || watchedGenre ? WATCHED_NO_MATCHES.subtitle : WATCHED_NONE.subtitle}
+                  scene={watchedSearch || watchedGenre ? WATCHED_NO_MATCHES.scene : WATCHED_NONE.scene}
+                />
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Shared poster grid for discover results
+function MovieGrid({ movies, watched }) {
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+      {movies.map((m) => {
+        const isSeen = watched.has(m.tmdbId);
+        return (
+          <Link
+            key={m.tmdbId}
+            to={`/movie/${m.tmdbId}`}
+            className="group relative"
+          >
+            {m.posterPath ? (
+              <img
+                src={posterUrl(m.posterPath, 'w185')}
+                alt=""
+                className={`w-full aspect-[2/3] rounded-lg object-cover transition-all group-hover:ring-2 ring-purple-500 ${
+                  isSeen ? 'ring-1 ring-green-500/40' : ''
+                }`}
+              />
+            ) : (
+              <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-600">
+                No img
+              </div>
+            )}
+            {isSeen && (
+              <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-green-600 flex items-center justify-center">
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            )}
+            <p className="text-xs text-gray-400 mt-1.5 truncate group-hover:text-white transition-colors">
+              {m.title}
+            </p>
+            {m.year && (
+              <p className="text-xs text-gray-600">{m.year}</p>
+            )}
+          </Link>
+        );
+      })}
     </div>
   );
 }

@@ -21,6 +21,45 @@ export async function createList({ title, description, createdBy }) {
   return ref.id;
 }
 
+export async function copyList(sourceListId, newOwnerId) {
+  const sourceSnap = await getDoc(doc(db, 'lists', sourceListId));
+  if (!sourceSnap.exists()) throw new Error('Source list not found');
+  const source = sourceSnap.data();
+
+  // Create the new list
+  const newListId = await createList({
+    title: `${source.title} (copy)`,
+    description: source.description || '',
+    createdBy: newOwnerId,
+  });
+
+  // Copy all movies
+  const moviesSnap = await getDocs(collection(db, 'lists', sourceListId, 'movies'));
+  let movieCount = 0;
+  let firstPoster = null;
+  for (const mDoc of moviesSnap.docs) {
+    const m = mDoc.data();
+    await setDoc(doc(db, 'lists', newListId, 'movies', mDoc.id), {
+      ...m,
+      addedAt: serverTimestamp(),
+    });
+    movieCount++;
+    if (!firstPoster && m.posterPath) firstPoster = m.posterPath;
+  }
+
+  // Update counts + poster on the new list
+  await updateDoc(doc(db, 'lists', newListId), {
+    movieCount,
+    ...(firstPoster && { firstPoster }),
+    ...(source.featuredMovie && { featuredMovie: source.featuredMovie }),
+  });
+
+  // Auto-start for the new owner
+  await startList(newOwnerId, newListId, source.title + ' (copy)', movieCount);
+
+  return newListId;
+}
+
 export async function getList(listId) {
   const snap = await getDoc(doc(db, 'lists', listId));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;

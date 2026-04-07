@@ -44,9 +44,8 @@ This is the single source of truth for all lore, voice, and creative direction i
 ### Identity
 - **Name:** Arcy (after Arcturus — Latin for "guardian of the bear")
 - **Species:** Celestial bear
-- **Face:** Made of stars and space dust — small, bright points that drift and shimmer, constellations that would scatter into nothing without the helmet
-- **Helmet:** Always worn. Keeps the stars of his face from drifting apart. He does not remove it. He does not think about removing it. It is part of him.
-- **Face reveal:** Reserved for a future moment. Do not describe or hint at what his face looks like beyond "made of stars." The helmet stays on in all current art and copy.
+- **Body:** Made of stars and space dust — small, bright points that drift and shimmer, constellations that would scatter into nothing without the helmet
+- **Face:** Very vauge. no emotion. the appearance of eyes and nose to look bear like. round eyes, never changing since arcy does not express emotion beyond curiosity
 - **Backpack:** Awlays worn as well. Utility. Some think its a jetpack, but Arcy has no need. He can walk on the stars that form him, traveling through space with each bearish step on the invisible fields that surround us all.
 
 ### Personality
@@ -176,6 +175,7 @@ The backstory is never dumped on the user. It leaks through in layers.
 | `arcy-star.png` | Arcy holding a bright star | Pin list toast |
 | `arcy-friend.png` | Arcy with another figure | Available, unused |
 | `arcy-stand.png` | Arcy standing | Available, unused |
+| `arcy-copy-reel.png` | Arcy holding two reels, one labeled COPY | Copy list confirmation modal |
 
 **Scenes — Landscape** (`src/assets/images/arcy-scenes/`)
 | File | Description | Best Use |
@@ -238,3 +238,57 @@ These are lines we do not cross:
 | `src/lib/copy/lore.js` | (planned) Loading lines, milestone lines, review reactions, easter egg pools |
 | `src/components/not-found/NotFound.jsx` | Empty state visual component |
 | `src/components/loading/Loading.jsx` | Loading screen with Arcy float |
+
+
+## 9. Art Style Prompt
+
+### Pose Prompt
+ultra clean, glossy, luminous cosmic character, smooth glass-like material, internally glowing, high contrast, deep indigo and vibrant electric blue gradients, crisp sharp edges, polished UI-quality asset, NOT painterly, NOT textured, NOT noisy, no grain, no brush strokes
+
+strong rim glow, bright bloom lighting, intense internal light source, maintain high contrast between bright edges and darker core, preserve shine and glow intensity
+
+celestial bear made of smooth cosmic gradient with minimal star detail, only a few large glowing stars and simple constellation lines, avoid dense small stars, avoid noise
+
+head and body are one continuous material
+
+proportions: slightly oversized rounded head (about 1.3x to 1.5x larger relative to body), small compact body, short limbs, soft bear-like silhouette, head is the dominant visual mass
+
+very subtle facial structure only: two soft round darker voids for eyes (perfectly circular, no emotion), faint muzzle defined by gentle gradient shift, no mouth
+
+glowing yellow star embedded in the constellations on his chest, where the heart would be, teal backpack with soft glow. from behind, star seen on backpack similar position to seen on chest
+
+
+props are flat, stylized, cartoon-like, matching the character’s clean UI aesthetic, no realism, no material textures (no metal, no grain, no physical detail), smooth shapes with minimal shading, bold simple forms, icon-like design, soft glow consistent with Arcy’s body
+
+avoid fine detail, avoid complex lighting on props, avoid realistic rendering
+
+sparse minimal stardust, very few particles. some larger than others.
+
+true transparent background (no gradient, no vignette, no fake backdrop)
+
+maintain exact visual style and simplicity of reference image, do not add extra detail
+
+reference image: https://chatgpt.com/backend-api/estuary/content?id=file_00000000e37071f5983d15dc388cb9cc&ts=493219&p=fs&cid=1&sig=7ad1882e9bebf668a49ba34a5b296f20d5b3ef77e3dcbe0d1ce4cbcc2c41a8e4&v
+
+if props become detailed or realistic, simplify them further to match a flat graphic icon style
+
+### Scene Prompt
+ultra clean, cinematic cosmic scene, soft atmospheric lighting, deep space color palette, purples and blues, subtle glow, NOT painterly, maintain clean rendering style consistent with character design
+
+Arcy: luminous celestial bear made of smooth glass-like cosmic material, internally glowing, deep indigo and electric blue gradients, minimal star detail, a few large glowing stars and simple constellation lines, no helmet
+
+subtle facial structure only: two soft round darker eye voids (no emotion), faint muzzle, no mouth
+
+glowing yellow star in chest, teal backpack with soft glow
+
+maintain strong glow and contrast on Arcy, ensure he remains bright and readable against environment
+
+environment is cinematic but slightly subdued so Arcy remains the visual focus
+
+no excessive detail or noise, avoid clutter
+
+lighting should enhance Arcy’s glow, not overpower it
+
+reference images:
+- https://chatgpt.com/backend-api/estuary/content?id=file_000000006ff0722f9d7dfff8467e3903&ts=493219&p=fs&cid=1&sig=1b362cf8e2cbf4e5495e11d3117e556f2cdc281f4d20da3dccda54a1be947b39&v=
+- https://chatgpt.com/backend-api/estuary/content?id=file_000000008ef071f591d81da3521500c5&ts=493219&p=fs&cid=1&sig=04e271d287d98ade865fcd0aa549049f80fed86316d73d40c8c75ced00f2b873&v=0

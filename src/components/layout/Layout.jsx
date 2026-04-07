@@ -24,7 +24,7 @@ export default function Layout({ children }) {
           {user && (
             <div className="flex items-center gap-4">
               <Link to="/movies" className="text-sm text-gray-300 hover:text-white transition-colors">
-                Discover
+                Movies
               </Link>
               <Link to="/friends" className="relative text-sm text-gray-300 hover:text-white transition-colors">
                 Friends

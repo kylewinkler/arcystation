@@ -116,15 +116,6 @@ export default function UserProfile() {
 
   const canSeeContent = isOwner || isFriend;
 
-  // Derive available years from watched data
-  const yearSet = new Set();
-  allWatchedMovies.forEach((m) => { if (m.year) yearSet.add(String(m.year)); });
-  const yearOptions = [...yearSet].sort((a, b) => b - a);
-
-  const watchedFiltered = selectedYear === 'all'
-    ? allWatchedMovies
-    : allWatchedMovies.filter((m) => String(m.year) === String(selectedYear));
-
   // Filter + sort lists
   const filteredLists = lists
     .filter((item) => {
@@ -210,19 +201,9 @@ export default function UserProfile() {
           {/* Watched by year */}
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-lg font-bold text-white">Watched</h2>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-purple-500"
-              >
-                <option value="all">All years</option>
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              <span className="text-sm text-gray-500">({watchedFiltered.length})</span>
-              {watchedFiltered.length > 6 && (
+              <h2 className="text-lg font-bold text-white">Recently Watched</h2>
+              <span className="text-sm text-gray-500">({allWatchedMovies.length})</span>
+              {allWatchedMovies.length > 6 && (
                 <Link
                   to={`/watched/${uid}/${selectedYear}`}
                   className="text-xs text-purple-400 hover:text-purple-300 ml-auto"
@@ -231,9 +212,9 @@ export default function UserProfile() {
                 </Link>
               )}
             </div>
-            {watchedFiltered.length > 0 ? (
+            {allWatchedMovies.length > 0 ? (
               <div className="grid grid-cols-6 gap-2">
-                {watchedFiltered.slice(0, 6).map((m) => (
+                {allWatchedMovies.slice(0, 6).map((m) => (
                   <Link
                     key={m.tmdbId}
                     to={`/movie/${m.tmdbId}`}

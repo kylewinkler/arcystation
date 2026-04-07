@@ -3,13 +3,15 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext';
 import {
   subscribeToList, subscribeToListMovies, getListStarters,
-  startList, getProgress, deleteList, enablePublicShare, disablePublicShare, setFeaturedMovie,
+  startList, deleteList, enablePublicShare, disablePublicShare, setFeaturedMovie,
   getUserProfile, getAllWatchedTmdbIds, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
+  copyList,
 } from '../lib/firestore';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
 import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
+import ArcyCopyReel from '../assets/images/arcy-poses/arcy-copy-reel.png';
 import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import MovieCard from '../components/movies/MovieCard';
@@ -41,8 +43,11 @@ export default function ListDetail() {
   const [unmarkModal, setUnmarkModal] = useState(null);
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
+  const [ownerProfile, setOwnerProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copying, setCopying] = useState(false);
+  const [copyingList, setCopyingList] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
 
   const { showToast } = useToast();
   const isOwner = list?.createdBy === user?.uid;
@@ -56,12 +61,15 @@ export default function ListDetail() {
     return () => { unsub1(); unsub2(); };
   }, [id]);
 
-  // Load starters, global watched, my profile, auto-start if needed
+  // Load starters, global watched, my profile, owner profile
   useEffect(() => {
     if (!user || !list) return;
     loadStarters();
     loadMyGlobalWatched();
     getUserProfile(user.uid).then(setMyProfile);
+    if (list.createdBy && list.createdBy !== user.uid) {
+      getUserProfile(list.createdBy).then(setOwnerProfile);
+    }
   }, [user, list]);
 
   // Subscribe to progress + watched for the target user (self or viewer)
@@ -149,6 +157,23 @@ export default function ListDetail() {
     setTimeout(() => setCopying(false), 2000);
   };
 
+  const handleCopyList = async () => {
+    if (copyingList) return;
+    setCopyingList(true);
+    try {
+      const newId = await copyList(id, user.uid);
+      navigate(`/lists/${newId}`);
+    } catch (err) {
+      console.error('Failed to copy list:', err);
+    }
+    setCopyingList(false);
+  };
+
+  const handleStartList = async () => {
+    await startList(user.uid, id, list.title, movies.length);
+    loadStarters();
+  };
+
   const handleToggleWatched = async (tmdbId, shouldWatch) => {
     if (shouldWatch) {
       // Pre-fill with existing review if they've watched this before
@@ -158,12 +183,6 @@ export default function ListDetail() {
       setRatingModal(tmdbId);
     } else {
       setUnmarkModal(tmdbId);
-    }
-  };
-
-  const ensureStarted = async () => {
-    if (!myProgress) {
-      await startList(user.uid, id, list.title, movies.length);
     }
   };
 
@@ -180,7 +199,6 @@ export default function ListDetail() {
   };
 
   const handleSubmitRating = async () => {
-    await ensureStarted();
     const movie = movies.find((m) => m.tmdbId === ratingModal);
     await markWatched(user.uid, id, ratingModal, {
       rating: rating || null,
@@ -192,7 +210,6 @@ export default function ListDetail() {
   };
 
   const handleSkipRating = async () => {
-    await ensureStarted();
     const movie = movies.find((m) => m.tmdbId === ratingModal);
     await markWatched(user.uid, id, ratingModal, {
       movieData: movie || undefined,
@@ -210,7 +227,7 @@ export default function ListDetail() {
     setUnmarkModal(null);
   };
 
-  if (loading && !list) {
+  if (copyingList || (loading && !list)) {
     return <LoadingScreen />;
   }
 
@@ -260,26 +277,71 @@ export default function ListDetail() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">{list.title}</h1>
-            {list.description && <p className="text-gray-400 mt-1">{list.description}</p>}
-          </div>
-          <div className="flex gap-2 shrink-0">
-            {isOwner && (
-              <>
-                <Link
-                  to={`/lists/${id}/edit`}
-                  className="text-sm text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
-                >
-                  Edit
+            {list.description && <p className="text-gray-400 mt-1 text-sm">{list.description}</p>}
+            <div className="flex items-center gap-2 mt-2">
+              {isOwner ? (
+                <span className="text-xs text-purple-400">Your list</span>
+              ) : ownerProfile ? (
+                <Link to={`/user/${ownerProfile.uid}`} className="flex items-center gap-1.5 group">
+                  {ownerProfile.photoURL ? (
+                    <img src={ownerProfile.photoURL} alt="" className="w-5 h-5 rounded-full" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[10px] font-bold">
+                      {ownerProfile.displayName?.[0]}
+                    </div>
+                  )}
+                  <span className="text-xs text-gray-400 group-hover:text-purple-400 transition-colors">
+                    {ownerProfile.displayName}
+                  </span>
                 </Link>
-                <button
-                  onClick={handleDelete}
-                  className="text-sm text-gray-400 hover:text-red-400 transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
-                >
-                  Delete
-                </button>
-              </>
-            )}
+              ) : null}
+              <span className="text-xs text-gray-600">{movies.length} {movies.length === 1 ? 'film' : 'films'}</span>
+            </div>
           </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {isOwner && (
+            <>
+              <Link
+                to={`/lists/${id}/edit`}
+                className="text-xs text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
+              >
+                Edit
+              </Link>
+              <button
+                onClick={handleDelete}
+                className="text-xs text-gray-400 hover:text-red-400 transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
+              >
+                Delete
+              </button>
+            </>
+          )}
+          {!isOwner && !myProgress && (
+            <button
+              onClick={handleStartList}
+              className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+            >
+              Start List
+            </button>
+          )}
+          {!isOwner && (
+            <button
+              onClick={() => setShowCopyModal(true)}
+              className="text-xs text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
+            >
+              Copy List
+            </button>
+          )}
+          {!isOwner && myProgress && (
+            <button
+              onClick={handleStopTracking}
+              className="text-xs text-gray-400 hover:text-red-400 transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
+            >
+              Leave List
+            </button>
+          )}
         </div>
       </div>
 
@@ -330,18 +392,6 @@ export default function ListDetail() {
           <p className="text-md text-gray-400 mb-2">Your progress</p>
           <ProgressBar watched={myProgress.watchedCount} total={movies.length} />
         </>
-      )}
-
-      {/* Join list button for non-owners who haven't started */}
-      {isViewingSelf && !myProgress && !isOwner && (
-        <button
-          onClick={async () => {
-            await startList(user.uid, id, list.title, movies.length);
-          }}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
-        >
-          Join List
-        </button>
       )}
 
       {/* Already seen count (when not tracking this list) */}
@@ -415,6 +465,40 @@ export default function ListDetail() {
                 className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors font-medium"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Copy list confirmation modal */}
+      {showCopyModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex justify-center">
+              <img
+                src={ArcyCopyReel}
+                alt=""
+                className="h-24 w-24 object-contain drop-shadow-[0_0_12px_rgba(168,85,247,0.5)]"
+              />
+            </div>
+            <h3 className="text-white font-medium text-center">Copy this list?</h3>
+            <p className="text-sm text-gray-400 text-center">
+              Arcy will duplicate this archive to your collection. You'll own the copy and can edit it freely.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCopyModal(false)}
+                className="flex-1 text-sm text-gray-400 hover:text-white border border-gray-700 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowCopyModal(false); handleCopyList(); }}
+                disabled={copyingList}
+                className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors font-medium disabled:bg-gray-700 disabled:text-gray-500"
+              >
+                {copyingList ? 'Copying...' : 'Copy List'}
               </button>
             </div>
           </div>

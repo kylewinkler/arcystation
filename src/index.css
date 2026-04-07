@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 @theme {
   --color-space-bg: #1A0F2E;
   --color-space-card: #24133F;

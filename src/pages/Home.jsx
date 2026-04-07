@@ -7,6 +7,7 @@ import {
 } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
+import SuggestionCard from '../components/movies/SuggestionCard';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import { HOME_NO_LISTS, HOME_NO_RESULTS } from '../lib/copy/empty';
@@ -32,8 +33,6 @@ export default function Home() {
   const [continueItem, setContinueItem] = useState(null);
   const [tonightPick, setTonightPick] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [ownerFilter, setOwnerFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pinnedIds, setPinnedIds] = useState(new Set());
 
@@ -214,95 +213,29 @@ export default function Home() {
 
       {/* Pick for tonight */}
       {tonightPick && tonightPick.movie.tmdbId !== continueItem?.movie.tmdbId && (
-        <Link
-          to={`/movie/${tonightPick.movie.tmdbId}`}
-          className="flex items-center gap-4 bg-gray-900/60 border border-gray-800 rounded-lg p-3 hover:border-purple-500 transition-colors"
-        >
-          {tonightPick.movie.posterPath ? (
-            <img
-              src={posterUrl(tonightPick.movie.posterPath, 'w185')}
-              alt={tonightPick.movie.title}
-              className="w-16 h-24 rounded object-cover shrink-0"
-            />
-          ) : (
-            <div className="w-16 h-24 rounded bg-gray-800 shrink-0 flex items-center justify-center text-gray-500 text-xs">
-              No img
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-yellow-400/80 font-medium mb-0.5">Pick for tonight</p>
-            <p className="text-white font-medium truncate">
-              {tonightPick.movie.title}
-              {tonightPick.movie.year && (
-                <span className="text-gray-400 font-normal"> ({tonightPick.movie.year})</span>
-              )}
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">from {tonightPick.listTitle}</p>
-          </div>
-        </Link>
+        <SuggestionCard
+          movie={tonightPick.movie}
+          label="Pick for tonight"
+          sublabel={`from ${tonightPick.listTitle}`}
+        />
       )}
 
       {/* Lists header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">My Lists</h1>
-          <button
-            onClick={() => { setOwnerFilter((f) => f === 'all' ? 'mine' : 'all'); setPage(1); }}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <span className="text-xs text-gray-400">Mine</span>
-            <div className={`w-9 h-5 rounded-full transition-colors relative ${ownerFilter === 'mine' ? 'bg-purple-600' : 'bg-gray-700'}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ownerFilter === 'mine' ? 'left-[18px]' : 'left-0.5'}`} />
-            </div>
-          </button>
-      </div>
-
-      {/* Search + filter */}
-      {lists.length > 0 && (
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search lists..."
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
-          />
-                  <Link
+        <h1 className="text-2xl font-bold text-white">List Activity</h1>
+          <Link
           to="/lists/new"
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-        >
-          + New List
-        </Link>
-
-        </div>
-      )}
-
-      {(() => {
-        const filtered = lists
-          .filter((item) => {
-            if (search && !item.listTitle.toLowerCase().includes(search.toLowerCase())) return false;
-            if (ownerFilter === 'mine' && item.list.createdBy !== user.uid) return false;
-            return true;
-          })
-          .sort((a, b) => {
-            const aPinned = pinnedIds.has(a.listId) ? 1 : 0;
-            const bPinned = pinnedIds.has(b.listId) ? 1 : 0;
-            if (aPinned !== bPinned) return bPinned - aPinned;
-            return 0;
-          });
-        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-        if (lists.length === 0) {
-          return <NotFound title={HOME_NO_LISTS.title} subtitle={HOME_NO_LISTS.subtitle} scene={HOME_NO_LISTS.scene} />;
-        }
-
-        return (
-          <>
-            {paginated.length === 0 ? (
-              <NotFound title={HOME_NO_RESULTS.title} subtitle={HOME_NO_RESULTS.subtitle} scene={HOME_NO_RESULTS.scene} />
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {paginated.map((item) => (
+            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            + New List
+          </Link>
+      </div>
+      {
+        lists.length === 0 ? (
+          <NotFound title={HOME_NO_LISTS.title} subtitle={HOME_NO_LISTS.subtitle} scene={HOME_NO_LISTS.scene} />
+        ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+                {lists.map((item) => (
                   <ListCard
                     key={item.id}
                     listId={item.listId}
@@ -317,30 +250,8 @@ export default function Home() {
                   />
                 ))}
               </div>
-            )}
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="text-sm text-gray-400 hover:text-white disabled:text-gray-700 disabled:cursor-not-allowed transition-colors"
-                >
-                  ← Prev
-                </button>
-                <span className="text-sm text-gray-500">{page} / {totalPages}</span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="text-sm text-gray-400 hover:text-white disabled:text-gray-700 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next →
-                </button>
-              </div>
-            )}
-          </>
-        );
-      })()}
+        )
+      }
     </div>
   );
 }
