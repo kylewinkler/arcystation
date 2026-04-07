@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import Login from './pages/Login';
@@ -15,6 +16,7 @@ import Admin from './pages/Admin';
 import Movies from './pages/Movies';
 import MovieDetail from './pages/MovieDetail';
 import WatchedByYear from './pages/WatchedByYear';
+import NotFoundPage from './pages/NotFoundPage';
 import ConstructionModal from './components/modal/ConstructionModal';
 
 export default function App() {
@@ -22,6 +24,7 @@ export default function App() {
     <BrowserRouter>
       <ConstructionModal />
       <AuthProvider>
+        <ToastProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/s/:slug" element={<PublicShare />} />
@@ -42,12 +45,14 @@ export default function App() {
                     <Route path="/movie/:tmdbId" element={<MovieDetail />} />
                     <Route path="/watched/:uid/:year" element={<WatchedByYear />} />
                     <Route path="/admin" element={<Admin />} />
+                    <Route path="*" element={<NotFoundPage />} />
                   </Routes>
                 </Layout>
               </ProtectedRoute>
             }
           />
         </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

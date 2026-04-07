@@ -9,6 +9,11 @@ import {
 } from '../lib/firestore';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { MOVIE_NOT_FOUND } from '../lib/copy/empty';
+import { useToast } from '../context/ToastContext';
+import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
+import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 
 export default function MovieDetail() {
   const { tmdbId } = useParams();
@@ -29,6 +34,7 @@ export default function MovieDetail() {
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
   const addMenuRef = useRef(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadMovie();
@@ -186,6 +192,18 @@ export default function MovieDetail() {
     };
   }
 
+  async function showWatchedToast(hasRating) {
+    const ids = await getAllWatchedTmdbIds(user.uid);
+    const milestone = getMilestone(ids.size);
+    if (milestone) {
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyStar }, 5000);
+    } else if (hasRating) {
+      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyStar });
+    } else {
+      showToast(randomFrom(RATING_ONLY_REACTIONS));
+    }
+  }
+
   async function handleMarkWatched() {
     await markWatchedStandalone(user.uid, tmdbId, {
       rating: rating || null,
@@ -194,6 +212,7 @@ export default function MovieDetail() {
     });
     setRatingModal(false);
     loadUserData();
+    showWatchedToast(!!rating);
   }
 
   async function handleSkipRating() {
@@ -202,6 +221,7 @@ export default function MovieDetail() {
     });
     setRatingModal(false);
     loadUserData();
+    showWatchedToast(false);
   }
 
   async function handleUnmark() {
@@ -216,7 +236,7 @@ export default function MovieDetail() {
   }
 
   if (!movie || !fullDetails) {
-    return <div className="text-gray-400 text-center py-12">Movie not found.</div>;
+    return <NotFound title={MOVIE_NOT_FOUND.title} subtitle={MOVIE_NOT_FOUND.subtitle} scene={MOVIE_NOT_FOUND.scene} />;
   }
 
   const directors = fullDetails.credits?.crew?.filter((c) => c.job === 'Director') || [];

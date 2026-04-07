@@ -4,6 +4,8 @@ import { getUserProfile, getAllWatchedMovies } from '../lib/firestore';
 import { getGenreList, posterUrl } from '../lib/tmdb';
 import { useAuth } from '../context/AuthContext';
 import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { WATCHED_NO_MATCHES, WATCHED_NONE } from '../lib/copy/empty';
 
 export default function WatchedByYear() {
   const { uid, year: urlYear } = useParams();
@@ -152,9 +154,11 @@ export default function WatchedByYear() {
           ))}
         </div>
       ) : (
-        <p className="text-gray-500 text-sm text-center py-8">
-          {search || selectedGenre ? 'No movies match your filters.' : 'No movies watched yet.'}
-        </p>
+        <NotFound
+          title={search || selectedGenre ? WATCHED_NO_MATCHES.title : WATCHED_NONE.title}
+          subtitle={search || selectedGenre ? WATCHED_NO_MATCHES.subtitle : WATCHED_NONE.subtitle}
+          scene={search || selectedGenre ? WATCHED_NO_MATCHES.scene : WATCHED_NONE.scene}
+        />
       )}
     </div>
   );

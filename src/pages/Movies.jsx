@@ -5,6 +5,7 @@ import { searchMovies, discoverMovies, getGenreList, posterUrl } from '../lib/tm
 import { getAllWatchedTmdbIds } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
+import { DISCOVER_NO_RESULTS } from '../lib/copy/empty';
 
 const TABS = [
   { key: 'popular', label: 'Popular' },
@@ -144,7 +145,7 @@ export default function Movies() {
       {loading ? (
         <LoadingScreen />
       ) : movies.length === 0 ? (
-        <NotFound image='screen' title='The projector hums, Arcy stares at the screen. Nothing' />
+        <NotFound title={DISCOVER_NO_RESULTS.title} subtitle={DISCOVER_NO_RESULTS.subtitle} scene={DISCOVER_NO_RESULTS.scene} />
       ) : (
         <>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">

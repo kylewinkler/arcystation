@@ -9,6 +9,10 @@ import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
+import { HOME_NO_LISTS, HOME_NO_RESULTS } from '../lib/copy/empty';
+import { useToast } from '../context/ToastContext';
+import { randomFrom, PIN_REACTIONS, FIRST_PIN } from '../lib/copy/lore';
+import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 
 function pickRandom(arr) {
   return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
@@ -23,6 +27,7 @@ const PAGE_SIZE = 10;
 
 export default function Home() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [lists, setLists] = useState([]);
   const [continueItem, setContinueItem] = useState(null);
   const [tonightPick, setTonightPick] = useState(null);
@@ -43,8 +48,13 @@ export default function Home() {
       newPinned.delete(listId);
       await unpinList(user.uid, listId);
     } else {
+      const isFirst = pinnedIds.size === 0;
       newPinned.add(listId);
       await pinList(user.uid, listId);
+      showToast({
+        message: isFirst ? FIRST_PIN : randomFrom(PIN_REACTIONS),
+        image: ArcyStar,
+      });
     }
     setPinnedIds(newPinned);
   }
@@ -235,12 +245,15 @@ export default function Home() {
       {/* Lists header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">My Lists</h1>
-        <Link
-          to="/lists/new"
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-        >
-          + New List
-        </Link>
+          <button
+            onClick={() => { setOwnerFilter((f) => f === 'all' ? 'mine' : 'all'); setPage(1); }}
+            className="flex items-center gap-2 shrink-0"
+          >
+            <span className="text-xs text-gray-400">Mine</span>
+            <div className={`w-9 h-5 rounded-full transition-colors relative ${ownerFilter === 'mine' ? 'bg-purple-600' : 'bg-gray-700'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ownerFilter === 'mine' ? 'left-[18px]' : 'left-0.5'}`} />
+            </div>
+          </button>
       </div>
 
       {/* Search + filter */}
@@ -253,15 +266,13 @@ export default function Home() {
             placeholder="Search lists..."
             className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
           />
-          <button
-            onClick={() => { setOwnerFilter((f) => f === 'all' ? 'mine' : 'all'); setPage(1); }}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <span className="text-xs text-gray-400">Mine</span>
-            <div className={`w-9 h-5 rounded-full transition-colors relative ${ownerFilter === 'mine' ? 'bg-purple-600' : 'bg-gray-700'}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ownerFilter === 'mine' ? 'left-[18px]' : 'left-0.5'}`} />
-            </div>
-          </button>
+                  <Link
+          to="/lists/new"
+          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+        >
+          + New List
+        </Link>
+
         </div>
       )}
 
@@ -282,17 +293,13 @@ export default function Home() {
         const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
         if (lists.length === 0) {
-          return (
-            <div className="text-center py-12">
-              <p className="text-gray-400">No lists yet. Create one or join a friend's list to get started.</p>
-            </div>
-          );
+          return <NotFound title={HOME_NO_LISTS.title} subtitle={HOME_NO_LISTS.subtitle} scene={HOME_NO_LISTS.scene} />;
         }
 
         return (
           <>
             {paginated.length === 0 ? (
-              <NotFound title={<>Arcy remembers… something used to be here. <br />But what?</>} />
+              <NotFound title={HOME_NO_RESULTS.title} subtitle={HOME_NO_RESULTS.subtitle} scene={HOME_NO_RESULTS.scene} />
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {paginated.map((item) => (

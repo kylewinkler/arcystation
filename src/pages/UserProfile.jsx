@@ -2,53 +2,37 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  getUserProfile, getUserAllProgress, getUserLists, getFriendship,
+  getUserProfile, getUserAllProgress, getFriendship,
   sendFriendRequest, acceptFriendRequest,
   getList, getAllWatchedMovies,
+  getPinnedLists, pinList, unpinList,
 } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
 import LoadingScreen from '../components/loading/Loading';
-
-function CollapsibleSection({ title, count, defaultOpen = true, children, rightAction }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 text-left"
-        >
-          <span className="text-gray-500 text-sm transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
-            ▶
-          </span>
-          <h2 className="text-lg font-bold text-white">{title}</h2>
-          {count != null && <span className="text-sm text-gray-500">({count})</span>}
-        </button>
-        {rightAction}
-      </div>
-      {open && <div className="mt-3">{children}</div>}
-    </div>
-  );
-}
+import NotFound from '../components/not-found/NotFound';
+import { PROFILE_NO_WATCHED, PROFILE_NO_LISTS, USER_NOT_FOUND } from '../lib/copy/empty';
+import { useToast } from '../context/ToastContext';
+import { randomFrom, PIN_REACTIONS, FIRST_PIN } from '../lib/copy/lore';
+import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 
 export default function UserProfile() {
   const { uid } = useParams();
   const { user, logout } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [myLists, setMyLists] = useState([]);
   const [allWatchedMovies, setAllWatchedMovies] = useState([]);
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
-  const [trackedProgress, setTrackedProgress] = useState([]);
-  const [trackedLists, setTrackedLists] = useState({});
-  const [trackedCreators, setTrackedCreators] = useState({});
-  const [progressMap, setProgressMap] = useState({});
+  const [lists, setLists] = useState([]);
+  const [pinnedIds, setPinnedIds] = useState(new Set());
   const [isFriend, setIsFriend] = useState(false);
   const [friendshipStatus, setFriendshipStatus] = useState(null);
   const [requestedBy, setRequestedBy] = useState(null);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [ownerFilter, setOwnerFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   const isOwner = user?.uid === uid;
 
@@ -56,11 +40,27 @@ export default function UserProfile() {
     loadProfile();
   }, [uid]);
 
-  // Load all watched movies once (single Firestore read)
   useEffect(() => {
     if (!uid) return;
     getAllWatchedMovies(uid).then(setAllWatchedMovies);
   }, [uid]);
+
+  async function handleTogglePin(listId) {
+    const newPinned = new Set(pinnedIds);
+    if (newPinned.has(listId)) {
+      newPinned.delete(listId);
+      await unpinList(user.uid, listId);
+    } else {
+      const isFirst = pinnedIds.size === 0;
+      newPinned.add(listId);
+      await pinList(user.uid, listId);
+      showToast({
+        message: isFirst ? FIRST_PIN : randomFrom(PIN_REACTIONS),
+        image: ArcyStar,
+      });
+    }
+    setPinnedIds(newPinned);
+  }
 
   async function loadProfile() {
     setLoading(true);
@@ -74,51 +74,34 @@ export default function UserProfile() {
       setIsFriend(friendship?.status === 'accepted');
     }
 
-    // Load lists + progress
-    const [lists, allProgress] = await Promise.all([
-      getUserLists(uid),
+    // Load all progress + enrich with list docs
+    const [allProgress, pinned] = await Promise.all([
       getUserAllProgress(uid),
+      isOwner ? getPinnedLists(uid) : Promise.resolve([]),
     ]);
+    setPinnedIds(new Set(pinned));
 
-    const pMap = {};
-    allProgress.forEach((p) => { pMap[p.listId] = p; });
-    setProgressMap(pMap);
-
-    // Filter out year lists from regular lists
-    setMyLists(lists.filter((l) => !l.isYearList));
-
-    // Tracked lists = started but not created by this user
-    const tracked = allProgress.filter(
-      (p) => !lists.some((l) => l.id === p.listId)
+    const enriched = await Promise.all(
+      allProgress.map(async (p) => {
+        try {
+          const listDoc = await getList(p.listId);
+          if (!listDoc) return null;
+          let creator = null;
+          if (listDoc.createdBy && listDoc.createdBy !== uid) {
+            creator = await getUserProfile(listDoc.createdBy);
+          }
+          return { ...p, list: listDoc, creator, isListOwner: listDoc.createdBy === uid };
+        } catch { return null; }
+      })
     );
-    setTrackedProgress(tracked);
 
-    // Load list docs + creator profiles for tracked lists
-    if (tracked.length > 0) {
-      const listDocs = {};
-      const creatorUids = new Set();
-      await Promise.all(
-        tracked.map(async (p) => {
-          try {
-            const listDoc = await getList(p.listId);
-            if (listDoc) {
-              listDocs[p.listId] = listDoc;
-              if (listDoc.createdBy) creatorUids.add(listDoc.createdBy);
-            }
-          } catch (err) { /* list may have been deleted */ }
-        })
-      );
-      setTrackedLists(listDocs);
-
-      const creators = {};
-      await Promise.all(
-        [...creatorUids].map(async (cuid) => {
-          const cp = await getUserProfile(cuid);
-          if (cp) creators[cuid] = cp;
-        })
-      );
-      setTrackedCreators(creators);
-    }
+    const valid = enriched.filter(Boolean);
+    valid.sort((a, b) => {
+      const aTime = a.lastActivityAt?.seconds || a.startedAt?.seconds || 0;
+      const bTime = b.lastActivityAt?.seconds || b.startedAt?.seconds || 0;
+      return bTime - aTime;
+    });
+    setLists(valid);
 
     setLoading(false);
   }
@@ -128,7 +111,7 @@ export default function UserProfile() {
   }
 
   if (!profile) {
-    return <div className="text-gray-400 text-center py-12">User not found.</div>;
+    return <NotFound title={USER_NOT_FOUND.title} subtitle={USER_NOT_FOUND.subtitle} scene={USER_NOT_FOUND.scene} />;
   }
 
   const canSeeContent = isOwner || isFriend;
@@ -138,10 +121,25 @@ export default function UserProfile() {
   allWatchedMovies.forEach((m) => { if (m.year) yearSet.add(String(m.year)); });
   const yearOptions = [...yearSet].sort((a, b) => b - a);
 
-  // Filter watched movies by selected year
   const watchedFiltered = selectedYear === 'all'
     ? allWatchedMovies
     : allWatchedMovies.filter((m) => String(m.year) === String(selectedYear));
+
+  // Filter + sort lists
+  const filteredLists = lists
+    .filter((item) => {
+      if (search && !item.listTitle.toLowerCase().includes(search.toLowerCase())) return false;
+      if (ownerFilter === 'mine' && !item.isListOwner) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const aPinned = pinnedIds.has(a.listId) ? 1 : 0;
+      const bPinned = pinnedIds.has(b.listId) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return 0;
+    });
+
+  const displayedLists = filteredLists.slice(0, 6);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -206,130 +204,131 @@ export default function UserProfile() {
         </div>
       )}
 
-      {/* Content sections */}
+      {/* Content */}
       {canSeeContent && (
         <div className="space-y-6">
           {/* Watched by year */}
           <div>
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="text-lg font-bold text-white">Watched</h2>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-purple-500"
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-lg font-bold text-white">Watched</h2>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-purple-500"
+              >
+                <option value="all">All years</option>
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <span className="text-sm text-gray-500">({watchedFiltered.length})</span>
+              {watchedFiltered.length > 6 && (
+                <Link
+                  to={`/watched/${uid}/${selectedYear}`}
+                  className="text-xs text-purple-400 hover:text-purple-300 ml-auto"
                 >
-                  <option value="all">All years</option>
-                  {yearOptions.map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-                <span className="text-sm text-gray-500">({watchedFiltered.length})</span>
-                {watchedFiltered.length > 6 && (
-                  <Link
-                    to={`/watched/${uid}/${selectedYear}`}
-                    className="text-xs text-purple-400 hover:text-purple-300 ml-auto"
-                  >
-                    View all →
-                  </Link>
-                )}
-              </div>
-              {watchedFiltered.length > 0 ? (
-                <div className="grid grid-cols-6 gap-2">
-                  {watchedFiltered.slice(0, 6).map((m) => (
-                    <Link
-                      key={m.tmdbId}
-                      to={`/movie/${m.tmdbId}`}
-                      className="group"
-                      title={m.title}
-                    >
-                      {m.posterPath ? (
-                        <img
-                          src={posterUrl(m.posterPath, 'w185')}
-                          alt={m.title}
-                          className="w-full aspect-[2/3] rounded object-cover ring-1 ring-purple-500/30 group-hover:ring-purple-500 transition-all"
-                        />
-                      ) : (
-                        <div className="w-full aspect-[2/3] rounded bg-gray-800 ring-1 ring-purple-500/30 flex items-center justify-center">
-                          <span className="text-xs text-gray-500 text-center leading-tight px-1">{m.title}</span>
-                        </div>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm">No movies watched yet.</p>
+                  View all →
+                </Link>
               )}
+            </div>
+            {watchedFiltered.length > 0 ? (
+              <div className="grid grid-cols-6 gap-2">
+                {watchedFiltered.slice(0, 6).map((m) => (
+                  <Link
+                    key={m.tmdbId}
+                    to={`/movie/${m.tmdbId}`}
+                    className="group"
+                    title={m.title}
+                  >
+                    {m.posterPath ? (
+                      <img
+                        src={posterUrl(m.posterPath, 'w185')}
+                        alt={m.title}
+                        className="w-full aspect-[2/3] rounded object-cover ring-1 ring-purple-500/30 group-hover:ring-purple-500 transition-all"
+                      />
+                    ) : (
+                      <div className="w-full aspect-[2/3] rounded bg-gray-800 ring-1 ring-purple-500/30 flex items-center justify-center">
+                        <span className="text-xs text-gray-500 text-center leading-tight px-1">{m.title}</span>
+                      </div>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <NotFound title={PROFILE_NO_WATCHED.title} subtitle={PROFILE_NO_WATCHED.subtitle} scene={PROFILE_NO_WATCHED.scene} />
+            )}
           </div>
 
-          {/* My Lists / Their Lists */}
-          <CollapsibleSection
-            title={isOwner ? 'My Lists' : `${profile.displayName}'s Lists`}
-            count={myLists.length}
-            rightAction={isOwner ? (
-              <Link
-                to="/lists/new"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-              >
-                + New List
-              </Link>
-            ) : null}
-          >
-            {myLists.length === 0 ? (
-              <p className="text-gray-500 text-sm">
-                {isOwner ? "You haven't created any lists yet." : 'No lists created yet.'}
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {myLists.map((list) => {
-                  const p = progressMap[list.id];
-                  return (
-                    <ListCard
-                      key={list.id}
-                      listId={list.id}
-                      title={list.title}
-                      total={list?.movieCount || p?.totalCount || 0}
-                      watched={p?.watchedCount}
-                      featuredPoster={list?.featuredMovie?.posterPath || list?.firstPoster}
-                    />
-                  );
-                })}
+          {/* Lists */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Lists</h2>
+              {isOwner && (
+                                <button
+                  onClick={() => setOwnerFilter((f) => f === 'all' ? 'mine' : 'all')}
+                  className="flex items-center gap-2 shrink-0"
+                >
+                  <span className="text-xs text-gray-400">Mine</span>
+                  <div className={`w-9 h-5 rounded-full transition-colors relative ${ownerFilter === 'mine' ? 'bg-purple-600' : 'bg-gray-700'}`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ownerFilter === 'mine' ? 'left-[18px]' : 'left-0.5'}`} />
+                  </div>
+                </button>
+
+              )}
+            </div>
+
+            {/* Search + Mine toggle */}
+            {lists.length > 0 && isOwner && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search lists..."
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                />
+                <Link
+                  to="/lists/new"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                >
+                  + New List
+                </Link>
               </div>
             )}
-          </CollapsibleSection>
 
-          {/* Tracked Lists */}
-          {(trackedProgress.length > 0 || isOwner) && (
-            <CollapsibleSection
-              title={isOwner ? 'Joined Lists' : 'Tracking'}
-              count={trackedProgress.length}
-              defaultOpen={trackedProgress.length > 0}
-            >
-              {trackedProgress.length === 0 ? (
-                <p className="text-gray-500 text-sm">No tracked lists yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {trackedProgress.map((p) => {
-                    const listDoc = trackedLists[p.listId];
-                    const total = listDoc?.movieCount || p.totalCount || 0;
-                    const creator = listDoc?.createdBy ? trackedCreators[listDoc.createdBy] : null;
-                    return (
-                      <ListCard
-                        key={p.id}
-                        listId={p.listId}
-                        title={p.listTitle}
-                        total={total}
-                        watched={p.watchedCount}
-                        creatorName={creator?.displayName}
-                        featuredPoster={listDoc?.featuredMovie?.posterPath || listDoc?.firstPoster}
-                        to={isOwner ? `/lists/${p.listId}` : `/lists/${p.listId}?viewer=${uid}`}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </CollapsibleSection>
-          )}
+            {displayedLists.length === 0 ? (
+              <NotFound title={PROFILE_NO_LISTS.title} subtitle={PROFILE_NO_LISTS.subtitle} scene={PROFILE_NO_LISTS.scene} />
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {displayedLists.map((item) => (
+                  <ListCard
+                    key={item.id}
+                    listId={item.listId}
+                    title={item.listTitle}
+                    total={item.list.movieCount || item.totalCount || 0}
+                    watched={item.watchedCount}
+                    isOwner={item.isListOwner}
+                    creatorName={item.creator?.displayName}
+                    pinned={pinnedIds.has(item.listId)}
+                    onTogglePin={isOwner ? handleTogglePin : undefined}
+                    featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
+                    to={isOwner ? `/lists/${item.listId}` : `/lists/${item.listId}?viewer=${uid}`}
+                  />
+                ))}
+              </div>
+            )}
 
+            {filteredLists.length > 6 && (
+              <div className="text-center">
+                <Link
+                  to="/"
+                  className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  View all lists →
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

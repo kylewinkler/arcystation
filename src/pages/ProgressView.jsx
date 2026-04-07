@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   subscribeToProgress, subscribeToListMovies, subscribeToWatched,
   markWatched, unmarkWatched, getUserProfile, getList, deleteList, getWatchedInfo,
+  getAllWatchedTmdbIds,
 } from '../lib/firestore';
 import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -11,6 +12,11 @@ import MovieCard from '../components/movies/MovieCard';
 import ProgressBar from '../components/lists/ProgressBar';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { PROGRESS_NOT_FOUND } from '../lib/copy/empty';
+import { useToast } from '../context/ToastContext';
+import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
+import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 
 export default function ProgressView() {
   const { uid, listId } = useParams();
@@ -26,6 +32,7 @@ export default function ProgressView() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const { showToast } = useToast();
   const isOwner = user?.uid === uid;
   const isListOwner = listData?.createdBy === user?.uid;
 
@@ -54,17 +61,31 @@ export default function ProgressView() {
     }
   };
 
+  const showWatchedToast = async (hasRating) => {
+    const ids = await getAllWatchedTmdbIds(uid);
+    const milestone = getMilestone(ids.size);
+    if (milestone) {
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyStar }, 5000);
+    } else if (hasRating) {
+      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyStar });
+    } else {
+      showToast(randomFrom(RATING_ONLY_REACTIONS));
+    }
+  };
+
   const handleSubmitRating = async () => {
     await markWatched(uid, listId, ratingModal, {
       rating: rating || null,
       note: note.trim() || null,
     });
     setRatingModal(null);
+    showWatchedToast(!!rating);
   };
 
   const handleSkipRating = async () => {
     await markWatched(uid, listId, ratingModal);
     setRatingModal(null);
+    showWatchedToast(false);
   };
 
   const handleStopTracking = async () => {
@@ -94,7 +115,7 @@ export default function ProgressView() {
   }
 
   if (!progress) {
-    return <div className="text-gray-400 text-center py-12">Progress not found.</div>;
+    return <NotFound title={PROGRESS_NOT_FOUND.title} subtitle={PROGRESS_NOT_FOUND.subtitle} scene={PROGRESS_NOT_FOUND.scene} />;
   }
 
   const displayName = isOwner ? 'Your' : `${profile?.displayName || 'User'}'s`;

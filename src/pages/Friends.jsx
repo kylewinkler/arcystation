@@ -7,6 +7,22 @@ import {
   getSuggestedFriends, getFriendship,
 } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { FRIENDS_NONE, FRIENDS_NO_RESULTS } from '../lib/copy/empty';
+
+function timeAgo(ms) {
+  const seconds = Math.floor((Date.now() - ms) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
 
 export default function Friends() {
   const { user } = useAuth();
@@ -153,7 +169,7 @@ export default function Friends() {
           </div>
         )}
         {searchQuery.trim() && !searching && searchResults.length === 0 && (
-          <p className="text-sm text-gray-500 mt-2">No users found.</p>
+          <p className="text-sm text-gray-500 mt-2">{FRIENDS_NO_RESULTS.title}</p>
         )}
       </div>
 
@@ -180,9 +196,16 @@ export default function Friends() {
                   <span className="text-gray-400 text-sm"> started </span>
                   <span className="text-white text-sm font-medium">{activity.listTitle}</span>
                 </div>
-                <span className="text-sm text-gray-500 shrink-0">
-                  {activity.watchedCount}/{activity.totalCount}
-                </span>
+                <div className="text-right shrink-0">
+                  <span className="text-sm text-gray-500">
+                    {activity.watchedCount}/{activity.totalCount}
+                  </span>
+                  {activity.startedAt?.seconds && (
+                    <p className="text-xs text-gray-600">
+                      {timeAgo(activity.startedAt.seconds * 1000)}
+                    </p>
+                  )}
+                </div>
               </Link>
             ))}
           </div>
@@ -289,7 +312,7 @@ export default function Friends() {
           {friends.length} {friends.length === 1 ? 'Friend' : 'Friends'}
         </h2>
         {friends.length === 0 ? (
-          <p className="text-gray-500 text-sm">No friends yet. Search by name to add someone!</p>
+          <NotFound title={FRIENDS_NONE.title} subtitle={FRIENDS_NONE.subtitle} scene={FRIENDS_NONE.scene} />
         ) : (
           <div className="space-y-2">
             {friends.map((friend) => (

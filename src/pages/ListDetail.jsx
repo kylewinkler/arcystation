@@ -7,12 +7,17 @@ import {
   getUserProfile, getAllWatchedTmdbIds, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
 } from '../lib/firestore';
+import { useToast } from '../context/ToastContext';
+import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
+import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import MovieCard from '../components/movies/MovieCard';
 import ProgressBar from '../components/lists/ProgressBar';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { LIST_NOT_FOUND } from '../lib/copy/empty';
 
 export default function ListDetail() {
   const { id } = useParams();
@@ -39,6 +44,7 @@ export default function ListDetail() {
   const [loading, setLoading] = useState(true);
   const [copying, setCopying] = useState(false);
 
+  const { showToast } = useToast();
   const isOwner = list?.createdBy === user?.uid;
   const isViewingSelf = !viewerUid || viewerUid === user?.uid;
   const targetUid = viewerUid || user?.uid;
@@ -56,10 +62,6 @@ export default function ListDetail() {
     loadStarters();
     loadMyGlobalWatched();
     getUserProfile(user.uid).then(setMyProfile);
-    // Auto-start list on first visit
-    getProgress(user.uid, id).then((p) => {
-      if (!p) startList(user.uid, id, list.title, movies.length);
-    });
   }, [user, list]);
 
   // Subscribe to progress + watched for the target user (self or viewer)
@@ -165,6 +167,18 @@ export default function ListDetail() {
     }
   };
 
+  const showWatchedToast = async (hasRating) => {
+    const ids = await getAllWatchedTmdbIds(user.uid);
+    const milestone = getMilestone(ids.size);
+    if (milestone) {
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyStar }, 5000);
+    } else if (hasRating) {
+      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyStar });
+    } else {
+      showToast(randomFrom(RATING_ONLY_REACTIONS));
+    }
+  };
+
   const handleSubmitRating = async () => {
     await ensureStarted();
     const movie = movies.find((m) => m.tmdbId === ratingModal);
@@ -174,6 +188,7 @@ export default function ListDetail() {
       movieData: movie || undefined,
     });
     setRatingModal(null);
+    showWatchedToast(!!rating);
   };
 
   const handleSkipRating = async () => {
@@ -183,6 +198,7 @@ export default function ListDetail() {
       movieData: movie || undefined,
     });
     setRatingModal(null);
+    showWatchedToast(false);
   };
 
   const handleCancelRating = () => {
@@ -199,7 +215,7 @@ export default function ListDetail() {
   }
 
   if (!list) {
-    return <div className="text-gray-400 text-center py-12">List not found.</div>;
+    return <NotFound title={LIST_NOT_FOUND.title} subtitle={LIST_NOT_FOUND.subtitle} scene={LIST_NOT_FOUND.scene} />;
   }
 
   const displayWatched = isViewingSelf ? myWatched : viewerWatched;
@@ -314,6 +330,18 @@ export default function ListDetail() {
           <p className="text-md text-gray-400 mb-2">Your progress</p>
           <ProgressBar watched={myProgress.watchedCount} total={movies.length} />
         </>
+      )}
+
+      {/* Join list button for non-owners who haven't started */}
+      {isViewingSelf && !myProgress && !isOwner && (
+        <button
+          onClick={async () => {
+            await startList(user.uid, id, list.title, movies.length);
+          }}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
+        >
+          Join List
+        </button>
       )}
 
       {/* Already seen count (when not tracking this list) */}

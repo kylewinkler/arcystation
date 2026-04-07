@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getListBySlug, getListMovies } from '../lib/firestore';
 import MovieCard from '../components/movies/MovieCard';
+import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { SHARE_NOT_FOUND } from '../lib/copy/empty';
 
 export default function PublicShare() {
   const { slug } = useParams();
@@ -24,20 +27,13 @@ export default function PublicShare() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!list) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">List Not Found</h1>
-          <p className="text-gray-400">This link may have expired or been disabled.</p>
-        </div>
+        <NotFound title={SHARE_NOT_FOUND.title} subtitle={SHARE_NOT_FOUND.subtitle} scene={SHARE_NOT_FOUND.scene} />
       </div>
     );
   }

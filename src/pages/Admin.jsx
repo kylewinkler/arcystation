@@ -7,6 +7,8 @@ import { getUserLists, getListMovies } from '../lib/firestore';
 
 import { ADMIN_UIDS } from '../lib/admin';
 import LoadingScreen from '../components/loading/Loading';
+import NotFound from '../components/not-found/NotFound';
+import { ACCESS_DENIED, ADMIN_NO_USERS, ADMIN_NO_LISTS } from '../lib/copy/empty';
 
 export default function Admin() {
   const { user } = useAuth();
@@ -108,7 +110,7 @@ export default function Admin() {
   }
 
   if (!ADMIN_UIDS.includes(user?.uid)) {
-    return <div className="text-gray-400 text-center py-12">Access denied.</div>;
+    return <NotFound title={ACCESS_DENIED.title} subtitle={ACCESS_DENIED.subtitle} scene={ACCESS_DENIED.scene} />;
   }
 
   const filtered = search.trim()
@@ -201,7 +203,7 @@ export default function Admin() {
                     </Link>
                   </div>
                   {lists.length === 0 ? (
-                    <p className="text-sm text-gray-600">No lists created yet.</p>
+                    <p className="text-sm text-gray-600">{ADMIN_NO_LISTS.title}</p>
                   ) : (
                     <div className="space-y-2">
                       {lists.map((l) => (
@@ -229,7 +231,7 @@ export default function Admin() {
           );
         })}
         {filtered.length === 0 && (
-          <p className="text-gray-500 text-center py-8">No users found.</p>
+          <p className="text-gray-500 text-center py-8">{ADMIN_NO_USERS.title}</p>
         )}
       </div>
     </div>

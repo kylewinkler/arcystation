@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ADMIN_UIDS } from '../../lib/admin';
 import FriendRequestBadge from '../friends/FriendRequestBadge';
-import  ArcyPop  from '../../assets/arcy/arcy-popcorn.png'
+import ArcyPop from '../../assets/images/arcy-poses/arcy-popcorn.png'
 
 export default function Layout({ children }) {
   const { user } = useAuth();
@@ -31,11 +30,6 @@ export default function Layout({ children }) {
                 Friends
                 <FriendRequestBadge />
               </Link>
-              {ADMIN_UIDS.includes(user.uid) && (
-                <Link to="/admin" className="text-sm text-gray-300 hover:text-white transition-colors">
-                  Admin
-                </Link>
-              )}
               <Link to={`/user/${user.uid}`} className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors">
                 {user.photoURL ? (
                   <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" />
