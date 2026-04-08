@@ -35,26 +35,35 @@ export default function Login() {
         {/* RIGHT — TEXT + LOGIN */}
         <div className="text-center md:text-left">
           <h1 className="text-4xl font-bold text-white mb-4">
-            Arcy Station
+            Arcturus Station...
+            <br />Population: 1
           </h1>
 
           <div className="text-gray-400 space-y-4 mb-8 leading-relaxed max-w-md">
-            <p>Arcy, a celestial bear, tends the universe's movie archive.</p>
+            <p>
+              The station sits on a barren world, orbiting the star "Arcturus".
+            </p>
 
             <p>
-              Every film ever made rests within the station.
-              <br/>
+              A celestial archivist named "Arcy" tends the universe's film archive, all alone.
+            </p>
+
+            <p>
+              Every film ever made rests within these walls.
+              <br />
               But the projector no longer works.
             </p>
 
-            <p>So Arcy listens to ours transmissions.</p>
-
             <p>
-              Signals arrive from far away—records of films as they were seen.
+              So he listens.
             </p>
 
             <p>
-              He reads each one carefully. And preserves it.
+              Faint signals arrive from far away—records of films as they were seen.
+            </p>
+
+            <p>
+              He reads each one carefully… and preserves it.
             </p>
           </div>
 
