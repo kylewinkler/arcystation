@@ -44,7 +44,7 @@ This is the single source of truth for all lore, voice, and creative direction i
 ### Identity
 - **Name:** Arcy (after Arcturus — Latin for "guardian of the bear")
 - **Species:** Celestial bear
-- **Body:** Made of stars and space dust — small, bright points that drift and shimmer, constellations that would scatter into nothing without the helmet
+- **Body:** Made of stars and space dust — small, bright points that drift and shimmer, constellations form and deform. A large glowing star acts as his heart, and when really happy glows even brighter than usual
 - **Face:** Very vauge. no emotion. the appearance of eyes and nose to look bear like. round eyes, never changing since arcy does not express emotion beyond curiosity
 - **Backpack:** Awlays worn as well. Utility. Some think its a jetpack, but Arcy has no need. He can walk on the stars that form him, traveling through space with each bearish step on the invisible fields that surround us all.
 
@@ -247,35 +247,30 @@ ultra clean, glossy, luminous cosmic character, smooth glass-like material, inte
 
 strong rim glow, bright bloom lighting, intense internal light source, maintain high contrast between bright edges and darker core, preserve shine and glow intensity
 
-celestial bear made of smooth cosmic gradient with minimal star detail, only a few large glowing stars and simple constellation lines, avoid dense small stars, avoid noise
+celestial bear made of smooth cosmic gradient with minimal star detail, only a few large glowing stars and simple constellation lines, avoid dense small stars, avoid noise, large yellow glowing heart star in place of his heart illuminates outward and can even be seen through his backpack, as seen in images shown from behind.
+
+it's glow intensifies to show satisfaction, and this is the only mood tell he has.
 
 head and body are one continuous material
 
 proportions: slightly oversized rounded head (about 1.3x to 1.5x larger relative to body), small compact body, short limbs, soft bear-like silhouette, head is the dominant visual mass
 
-very subtle facial structure only: two soft round darker voids for eyes (perfectly circular, no emotion), faint muzzle defined by gentle gradient shift, no mouth
+very subtle facial structure only: two soft round gradient shift smudges for eyes, no emotion, faint muzzle defined by gentle gradient shift, no mouth
 
 glowing yellow star embedded in the constellations on his chest, where the heart would be, teal backpack with soft glow. from behind, star seen on backpack similar position to seen on chest
 
-
 props are flat, stylized, cartoon-like, matching the character’s clean UI aesthetic, no realism, no material textures (no metal, no grain, no physical detail), smooth shapes with minimal shading, bold simple forms, icon-like design, soft glow consistent with Arcy’s body
-
-avoid fine detail, avoid complex lighting on props, avoid realistic rendering
 
 sparse minimal stardust, very few particles. some larger than others.
 
 true transparent background (no gradient, no vignette, no fake backdrop)
 
-maintain exact visual style and simplicity of reference image, do not add extra detail
-
-reference image: https://chatgpt.com/backend-api/estuary/content?id=file_00000000e37071f5983d15dc388cb9cc&ts=493219&p=fs&cid=1&sig=7ad1882e9bebf668a49ba34a5b296f20d5b3ef77e3dcbe0d1ce4cbcc2c41a8e4&v
-
-if props become detailed or realistic, simplify them further to match a flat graphic icon style
+maintain exact visual style and simplicity of reference image https://chatgpt.com/backend-api/estuary/content?id=file_00000000e37071f5983d15dc388cb9cc&ts=493219&p=fs&cid=1&sig=7ad1882e9bebf668a49ba34a5b296f20d5b3ef77e3dcbe0d1ce4cbcc2c41a8e4&v
 
 ### Scene Prompt
 ultra clean, cinematic cosmic scene, soft atmospheric lighting, deep space color palette, purples and blues, subtle glow, NOT painterly, maintain clean rendering style consistent with character design
 
-Arcy: luminous celestial bear made of smooth glass-like cosmic material, internally glowing, deep indigo and electric blue gradients, minimal star detail, a few large glowing stars and simple constellation lines, no helmet
+Arcy: luminous celestial bear made of smooth glass-like cosmic material, internally glowing, deep indigo and electric blue gradients, minimal star detail, a few large glowing stars and simple constellation lines, one large yellow star shaped star is his heart and glows outward, glowing brighter the happier he is. this is the ONLY emotional tell he has, as his face always remains emotionless.
 
 subtle facial structure only: two soft round darker eye voids (no emotion), faint muzzle, no mouth
 

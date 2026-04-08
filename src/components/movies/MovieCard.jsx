@@ -52,11 +52,11 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
         )}
       </Link>
       <div className="flex-1 min-w-0">
-        <Link to={`/movie/${movie.tmdbId}`} className="hover:text-purple-400 transition-colors" onClick={(e) => e.stopPropagation()}>
-          <p className={`text-sm font-medium truncate ${isWatched ? 'text-gray-300' : 'text-white'}`}>
-            {movie.title} {movie.year && <span className="text-gray-400">({movie.year})</span>}
-          </p>
-        </Link>
+        <p className={`text-sm font-medium truncate ${isWatched ? 'text-gray-300' : 'text-white'}`}>
+          <Link to={`/movie/${movie.tmdbId}`} className="hover:text-purple-400 transition-colors" onClick={(e) => e.stopPropagation()}>
+            {movie.title}{movie.year && <span className="text-gray-400"> ({movie.year})</span>}
+          </Link>
+        </p>
         {isWatched && (
           <span className="inline-flex items-center gap-1 text-xs text-purple-400 mt-0.5">
             Watched

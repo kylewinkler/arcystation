@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   subscribeToList, subscribeToListMovies, getListStarters,
   startList, deleteList, enablePublicShare, disablePublicShare, setFeaturedMovie,
-  getUserProfile, getAllWatchedTmdbIds, getWatchedInfo,
+  getUserProfile, getAllWatchedTmdbIds, getAllWatchedMovies, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
   copyList,
 } from '../lib/firestore';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
-import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
+import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
 import ArcyCopyReel from '../assets/images/arcy-poses/arcy-copy-reel.png';
 import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -19,7 +19,9 @@ import ProgressBar from '../components/lists/ProgressBar';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
+import ConfirmModal from '../components/modal/ConfirmModal';
 import { LIST_NOT_FOUND } from '../lib/copy/empty';
+import RatingModal from '../components/modal/RatingModal';
 
 export default function ListDetail() {
   const { id } = useParams();
@@ -43,11 +45,17 @@ export default function ListDetail() {
   const [unmarkModal, setUnmarkModal] = useState(null);
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
+  const [globalRatings, setGlobalRatings] = useState({});
+  const [viewerGlobalRatings, setViewerGlobalRatings] = useState({});
   const [ownerProfile, setOwnerProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copying, setCopying] = useState(false);
   const [copyingList, setCopyingList] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
 
   const { showToast } = useToast();
   const isOwner = list?.createdBy === user?.uid;
@@ -108,6 +116,34 @@ export default function ListDetail() {
     };
   }, [user, targetUid, id]);
 
+  // Load global ratings (source of truth for reviews)
+  useEffect(() => {
+    if (!user) return;
+    loadGlobalRatings(user.uid, setGlobalRatings);
+  }, [user, myWatched]);
+
+  useEffect(() => {
+    if (!targetUid || isViewingSelf) return;
+    loadGlobalRatings(targetUid, setViewerGlobalRatings);
+  }, [targetUid, viewerWatched]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+
+  async function loadGlobalRatings(uid, setter) {
+    const movies = await getAllWatchedMovies(uid);
+    const map = {};
+    movies.forEach((m) => { map[m.tmdbId] = m; });
+    setter(map);
+  }
+
   async function loadStarters() {
     const allStarters = await getListStarters(id);
     setStarters(allStarters);
@@ -124,13 +160,11 @@ export default function ListDetail() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this list? This cannot be undone.')) return;
     await deleteList(id);
     navigate('/');
   };
 
   const handleStopTracking = async () => {
-    if (!confirm('Stop tracking this list? Your watched progress will be removed.')) return;
     const progressId = `${user.uid}__${id}`;
     const watchedSnap = await getDocs(collection(db, 'userProgress', progressId, 'watched'));
     if (!watchedSnap.empty) {
@@ -139,23 +173,10 @@ export default function ListDetail() {
       await batch.commit();
     }
     await deleteDoc(doc(db, 'userProgress', progressId));
+    setShowLeaveModal(false);
     if (!isOwner) navigate('/');
   };
 
-  const handleToggleShare = async () => {
-    if (list.isPublic) {
-      await disablePublicShare(id);
-    } else {
-      await enablePublicShare(id);
-    }
-  };
-
-  const handleCopyLink = async () => {
-    const url = `${window.location.origin}/s/${list.shareSlug}`;
-    await navigator.clipboard.writeText(url);
-    setCopying(true);
-    setTimeout(() => setCopying(false), 2000);
-  };
 
   const handleCopyList = async () => {
     if (copyingList) return;
@@ -190,9 +211,9 @@ export default function ListDetail() {
     const ids = await getAllWatchedTmdbIds(user.uid);
     const milestone = getMilestone(ids.size);
     if (milestone) {
-      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyStar }, 5000);
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyReaddTransmission }, 5000);
     } else if (hasRating) {
-      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyStar });
+      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyReaddTransmission });
     } else {
       showToast(randomFrom(RATING_ONLY_REACTIONS));
     }
@@ -207,15 +228,6 @@ export default function ListDetail() {
     });
     setRatingModal(null);
     showWatchedToast(!!rating);
-  };
-
-  const handleSkipRating = async () => {
-    const movie = movies.find((m) => m.tmdbId === ratingModal);
-    await markWatched(user.uid, id, ratingModal, {
-      movieData: movie || undefined,
-    });
-    setRatingModal(null);
-    showWatchedToast(false);
   };
 
   const handleCancelRating = () => {
@@ -237,6 +249,7 @@ export default function ListDetail() {
 
   const displayWatched = isViewingSelf ? myWatched : viewerWatched;
   const displayProgress = isViewingSelf ? myProgress : viewerProgress;
+  const displayRatings = isViewingSelf ? globalRatings : viewerGlobalRatings;
   const canCheckMovies = isViewingSelf && !!myProgress;
 
   // Build watchers list: active viewer first, then self (if not active), then others
@@ -275,7 +288,7 @@ export default function ListDetail() {
       {/* Header */}
       <div>
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-white">{list.title}</h1>
             {list.description && <p className="text-gray-400 mt-1 text-sm">{list.description}</p>}
             <div className="flex items-center gap-2 mt-2">
@@ -298,50 +311,65 @@ export default function ListDetail() {
               <span className="text-xs text-gray-600">{movies.length} {movies.length === 1 ? 'film' : 'films'}</span>
             </div>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2 mt-3">
-          {isOwner && (
-            <>
-              <Link
-                to={`/lists/${id}/edit`}
-                className="text-xs text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
-              >
-                Edit
-              </Link>
-              <button
-                onClick={handleDelete}
-                className="text-xs text-gray-400 hover:text-red-400 transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
-              >
-                Delete
-              </button>
-            </>
-          )}
-          {!isOwner && !myProgress && (
+          {/* 3-dot menu */}
+          <div className="relative shrink-0" ref={menuRef}>
             <button
-              onClick={handleStartList}
-              className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+              onClick={() => setShowMenu((v) => !v)}
+              className="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-gray-800"
             >
-              Start List
+              <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                <circle cx="10" cy="4" r="1.5" />
+                <circle cx="10" cy="10" r="1.5" />
+                <circle cx="10" cy="16" r="1.5" />
+              </svg>
             </button>
-          )}
-          {!isOwner && (
-            <button
-              onClick={() => setShowCopyModal(true)}
-              className="text-xs text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
-            >
-              Copy List
-            </button>
-          )}
-          {!isOwner && myProgress && (
-            <button
-              onClick={handleStopTracking}
-              className="text-xs text-gray-400 hover:text-red-400 transition-colors border border-gray-700 px-3 py-1.5 rounded-lg"
-            >
-              Leave List
-            </button>
-          )}
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-40">
+                {isOwner && (
+                  <>
+                    <Link
+                      to={`/lists/${id}/edit`}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                      onClick={() => setShowMenu(false)}
+                    >
+                      Edit List
+                    </Link>
+                    <button
+                      onClick={() => { setShowMenu(false); setShowDeleteModal(true); }}
+                      className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 transition-colors"
+                    >
+                      Delete List
+                    </button>
+                  </>
+                )}
+                {!isOwner && !myProgress && (
+                  <button
+                    onClick={() => { setShowMenu(false); handleStartList(); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                  >
+                    Start List
+                  </button>
+                )}
+                {!isOwner && (
+                  <button
+                    onClick={() => { setShowMenu(false); setShowCopyModal(true); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                  >
+                    Copy List
+                  </button>
+                )}
+                {!isOwner && myProgress && (
+                  <button
+                    onClick={() => { setShowMenu(false); setShowLeaveModal(true); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 transition-colors"
+                  >
+                    Leave List
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -420,7 +448,7 @@ export default function ListDetail() {
           <MovieCard
             key={movie.tmdbId}
             movie={movie}
-            watchedData={displayWatched[movie.tmdbId]}
+            watchedData={displayWatched[movie.tmdbId] ? { ...displayWatched[movie.tmdbId], ...(displayRatings[movie.tmdbId] || {}) } : undefined}
             onToggleWatched={canCheckMovies ? handleToggleWatched : undefined}
             readonly={!canCheckMovies}
             seenElsewhere={allMyWatched.has(movie.tmdbId)}
@@ -432,101 +460,63 @@ export default function ListDetail() {
         ))}
       </div>
 
-      {/* Rating modal (mark as watched) */}
-      {ratingModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-white font-medium">Rate this movie</h3>
-            <div className="flex justify-center">
-              <StarRating value={rating} onChange={setRating} size="lg" />
-            </div>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Quick thoughts? (optional)"
-              rows={2}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleCancelRating}
-                className="flex-1 text-sm text-gray-500 hover:text-gray-300 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSkipRating}
-                className="flex-1 text-sm text-gray-400 hover:text-white border border-gray-700 py-2 rounded-lg transition-colors"
-              >
-                Mark Watched
-              </button>
-              <button
-                onClick={handleSubmitRating}
-                className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors font-medium"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RatingModal
+        isOpen={!!ratingModal}
+        rating={rating}
+        note={note}
+        setRating={setRating}
+        setNote={setNote}
+        onCancel={handleCancelRating}
+        onSave={handleSubmitRating}
+      />
 
       {/* Copy list confirmation modal */}
       {showCopyModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm space-y-4">
-            <div className="flex justify-center">
-              <img
-                src={ArcyCopyReel}
-                alt=""
-                className="h-24 w-24 object-contain drop-shadow-[0_0_12px_rgba(168,85,247,0.5)]"
-              />
-            </div>
-            <h3 className="text-white font-medium text-center">Copy this list?</h3>
-            <p className="text-sm text-gray-400 text-center">
-              Arcy will duplicate this archive to your collection. You'll own the copy and can edit it freely.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowCopyModal(false)}
-                className="flex-1 text-sm text-gray-400 hover:text-white border border-gray-700 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { setShowCopyModal(false); handleCopyList(); }}
-                disabled={copyingList}
-                className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors font-medium disabled:bg-gray-700 disabled:text-gray-500"
-              >
-                {copyingList ? 'Copying...' : 'Copy List'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Copy this list?"
+          message="Arcy will duplicate this archive to your collection. You'll own the copy and can edit it freely."
+          confirmLabel={copyingList ? 'Copying...' : 'Copy List'}
+          onConfirm={() => { setShowCopyModal(false); handleCopyList(); }}
+          onCancel={() => setShowCopyModal(false)}
+          image={ArcyCopyReel}
+          disabled={copyingList}
+        />
+      )}
+
+      {/* Delete list confirmation modal */}
+      {showDeleteModal && (
+        <ConfirmModal
+          title="Delete this list?"
+          message="This cannot be undone. All movies and progress data for this list will be removed."
+          confirmLabel="Delete"
+          confirmStyle="bg-red-600 hover:bg-red-700"
+          onConfirm={() => { setShowDeleteModal(false); handleDelete(); }}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
+
+      {/* Leave list confirmation modal */}
+      {showLeaveModal && (
+        <ConfirmModal
+          title="Leave this list?"
+          message="Your watched progress on this list will be removed. Your reviews and ratings are kept."
+          confirmLabel="Leave"
+          confirmStyle="bg-red-600 hover:bg-red-700"
+          onConfirm={handleStopTracking}
+          onCancel={() => setShowLeaveModal(false)}
+        />
       )}
 
       {/* Unmark confirmation modal */}
       {unmarkModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-white font-medium">Unmark as watched?</h3>
-            <p className="text-sm text-gray-400">This will remove your rating and notes for this movie on this list.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setUnmarkModal(null)}
-                className="flex-1 text-sm text-gray-400 hover:text-white border border-gray-700 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmUnmark}
-                className="flex-1 text-sm bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition-colors font-medium"
-              >
-                Unmark
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Unmark as watched?"
+          message="This will remove your watched status for this movie on this list. Your review is kept."
+          confirmLabel="Unmark"
+          confirmStyle="bg-red-600 hover:bg-red-700"
+          onConfirm={handleConfirmUnmark}
+          onCancel={() => setUnmarkModal(null)}
+        />
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import {
   getUserAllProgress, getListMovies, getWatchedMovies, getList,
   getUserLists, addMovieToList, removeMovieFromList, createList, startList,
   markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
+  getAllWatchedTmdbIds,
 } from '../lib/firestore';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
@@ -13,7 +14,8 @@ import NotFound from '../components/not-found/NotFound';
 import { MOVIE_NOT_FOUND } from '../lib/copy/empty';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
-import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
+import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
+import RatingModal from '../components/modal/RatingModal';
 
 export default function MovieDetail() {
   const { tmdbId } = useParams();
@@ -196,9 +198,9 @@ export default function MovieDetail() {
     const ids = await getAllWatchedTmdbIds(user.uid);
     const milestone = getMilestone(ids.size);
     if (milestone) {
-      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyStar }, 5000);
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyReaddTransmission }, 5000);
     } else if (hasRating) {
-      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyStar });
+      showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyReaddTransmission });
     } else {
       showToast(randomFrom(RATING_ONLY_REACTIONS));
     }
@@ -213,15 +215,6 @@ export default function MovieDetail() {
     setRatingModal(false);
     loadUserData();
     showWatchedToast(!!rating);
-  }
-
-  async function handleSkipRating() {
-    await markWatchedStandalone(user.uid, tmdbId, {
-      movieData: getMovieData(),
-    });
-    setRatingModal(false);
-    loadUserData();
-    showWatchedToast(false);
   }
 
   async function handleUnmark() {
@@ -475,44 +468,16 @@ export default function MovieDetail() {
           </div>
         </div>
       )}
-      {/* Rating modal (standalone) */}
-      {ratingModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-white font-medium">Rate this movie</h3>
-            <div className="flex justify-center">
-              <StarRating value={rating} onChange={setRating} size="lg" />
-            </div>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Quick thoughts? (optional)"
-              rows={2}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setRatingModal(false)}
-                className="flex-1 text-sm text-gray-500 hover:text-gray-300 py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSkipRating}
-                className="flex-1 text-sm text-gray-400 hover:text-white border border-gray-700 py-2 rounded-lg transition-colors"
-              >
-                Mark Watched
-              </button>
-              <button
-                onClick={handleMarkWatched}
-                className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg transition-colors font-medium"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
+      <RatingModal
+        isOpen={ratingModal}
+        rating={rating}
+        note={note}
+        setRating={setRating}
+        setNote={setNote}
+        onCancel={() => setRatingModal(false)}
+        onSave={handleMarkWatched}
+      />
     </div>
   );
 }

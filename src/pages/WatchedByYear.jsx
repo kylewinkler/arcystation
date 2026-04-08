@@ -83,7 +83,7 @@ export default function WatchedByYear() {
           ← {isOwner ? 'Back to profile' : `Back to ${profile?.displayName}`}
         </Link>
         <h1 className="text-2xl font-bold text-white mt-1">
-          {isOwner ? 'Your' : `${profile?.displayName}'s`}{yearLabel} Movies
+          {`${profile?.displayName}'s`} Movies
         </h1>
         <p className="text-sm text-gray-500 mt-1">{yearFiltered.length} movies watched</p>
       </div>

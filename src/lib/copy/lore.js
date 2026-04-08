@@ -75,33 +75,33 @@ export const MILESTONES = [
   },
   {
     count: 10,
-    title: 'Ten signals.',
+    title: 'Ten signals recieved.',
     subtitle: 'The archive grows. Arcy dusts the new shelf.',
   },
   {
     count: 25,
-    title: 'Twenty-five.',
+    title: '25 transmissions logged.',
     subtitle: 'Arcy pauses at the window. The plains look the same. But something feels different.',
   },
   {
     count: 50,
     title: 'Fifty transmissions.',
-    subtitle: 'Arcy can\'t remember the last time the station felt this warm.',
+    subtitle: 'The projector flickers. Just for a moment. Arcy stares, motionless. The screen goes dark again. But it flickered.',
   },
   {
     count: 75,
     title: 'Seventy-five signals received.',
-    subtitle: 'A memory surfaces — a scene he almost recognizes. Then it\'s gone.',
+    subtitle: 'A memory surfaces — a scene he almost recognizes. Arcy waits for it to fade away, but it doesn\'t.',
   },
   {
     count: 100,
     title: 'One hundred.',
-    subtitle: 'Arcy presses his paw to the glass and, for the first time in a long time, does not feel cold.',
+    subtitle: 'The scratches on the wall have spread past the cot, down the corridor. Arcy looks down at his heart star. It glows brighter.',
   },
   {
     count: 250,
     title: 'Two hundred and fifty.',
-    subtitle: 'The scratches on the wall have spread past the cot, down the corridor. Arcy doesn\'t mind.',
+    subtitle: 'Arcy hears a noise coming from the projector room. The projector light fades. The reel slowing down to stop. Something was shown.',
   },
   {
     count: 500,
@@ -111,7 +111,7 @@ export const MILESTONES = [
   {
     count: 1000,
     title: 'One thousand transmissions received.',
-    subtitle: 'The projector flickers. Just for a moment. Arcy holds his breath. The screen goes dark again. But it flickered.',
+    subtitle: '???',
   },
 ];
 
