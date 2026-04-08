@@ -1,6 +1,6 @@
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Arcy from '../assets/images/arcy-scenes/empty-archives.png';
+import Arcy from '../assets/images/arcy-scenes/looking-out-door-to-space-sky-landscape.png';
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -28,7 +28,7 @@ export default function Login() {
           <img
             src={Arcy}
             alt=""
-            className="max-h-[500px] w-auto object-contain opacity-90"
+            className="max-h-[400px] w-auto object-contain opacity-90"
           />
         </div>
 
