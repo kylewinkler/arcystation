@@ -18,7 +18,11 @@
       "Bash(find /c/Users/winks/approot/movies/src -type f \\\\\\(-name *.js -o -name *.jsx \\\\\\))",
       "Bash(ls \"C:\\\\Users\\\\winks\\\\approot\\\\movies\\\\src\\\\components\\\\modal\"\" 2>/dev/null || echo \"no modal dir \")",
       "Bash(node -e ':*)",
-      "WebFetch(domain:api.themoviedb.org)"
+      "WebFetch(domain:api.themoviedb.org)",
+      "Bash(node -e \"const {NFR_MOVIES} = require\\('./src/lib/seed-data/nfr.js'\\); console.log\\('Total entries:', NFR_MOVIES.length\\);\")",
+      "Bash(node -e \"const {NFR_MOVIES} = require\\('./src/lib/seed-data/nfr.js'\\); console.log\\('Current count:', NFR_MOVIES.length\\);\")",
+      "Bash(python3 -c ':*)",
+      "Bash(grep -E \"\\\\.\\(jsx|js\\)$\")"
     ]
   }
 }

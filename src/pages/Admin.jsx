@@ -5,6 +5,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { getUserLists, getListMovies, getPrebuiltLists } from '../lib/firestore';
 
+import { NFR_MOVIES } from '../lib/seed-data/nfr';
 import { ADMIN_UIDS } from '../lib/admin';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -113,6 +114,85 @@ export default function Admin() {
       setSeedResult(`Error: ${err.message}`);
     }
     setSeeding(false);
+  }
+
+  const [seedingNFR, setSeedingNFR] = useState(false);
+  const [seedNFRResult, setSeedNFRResult] = useState(null);
+
+  async function seedNFR() {
+    setSeedingNFR(true);
+    setSeedNFRResult(null);
+    try {
+      const apiKey = import.meta.env.VITE_TMDB_API_KEY;
+
+      const listRef = await addDoc(collection(db, 'lists'), {
+        title: 'National Film Registry',
+        description: 'Films preserved by the Library of Congress for being culturally, historically, or aesthetically significant.',
+        createdBy: null,
+        isPrebuilt: true,
+        movieCount: 0,
+        isPublic: false,
+        shareSlug: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const listId = listRef.id;
+      let count = 0;
+      let firstPoster = null;
+      let notFound = [];
+
+      for (let i = 0; i < NFR_MOVIES.length; i++) {
+        const [title, year] = NFR_MOVIES[i];
+        setSeedNFRResult(`Searching ${i + 1}/${NFR_MOVIES.length}: ${title} (${year})...`);
+
+        const res = await fetch(
+          `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(title)}&year=${year}&include_adult=false`
+        );
+        const data = await res.json();
+        const results = data.results || [];
+
+        // Try exact title match first, then fall back to first result
+        const exact = results.find(
+          (r) => r.title.toLowerCase() === title.toLowerCase()
+        );
+        const m = exact || results[0];
+
+        if (!m) {
+          notFound.push(`${title} (${year})`);
+          continue;
+        }
+
+        const movieDoc = {
+          title: m.title || '',
+          posterPath: m.poster_path || null,
+          year: m.release_date ? m.release_date.slice(0, 4) : String(year),
+          overview: m.overview || '',
+          genreIds: m.genre_ids || [],
+          order: i,
+          addedAt: serverTimestamp(),
+        };
+
+        await setDoc(doc(db, 'lists', listId, 'movies', String(m.id)), movieDoc);
+        if (!firstPoster && m.poster_path) firstPoster = m.poster_path;
+        count++;
+      }
+
+      await updateDoc(doc(db, 'lists', listId), {
+        movieCount: count,
+        ...(firstPoster && { firstPoster }),
+      });
+
+      const msg = `Created "${listId}" with ${count}/${NFR_MOVIES.length} movies.`;
+      setSeedNFRResult(notFound.length > 0
+        ? `${msg} Not found (${notFound.length}): ${notFound.slice(0, 10).join(', ')}${notFound.length > 10 ? '...' : ''}`
+        : msg
+      );
+      getPrebuiltLists().then(setPrebuiltLists);
+    } catch (err) {
+      console.error('NFR seed failed:', err);
+      setSeedNFRResult(`Error: ${err.message}`);
+    }
+    setSeedingNFR(false);
   }
 
   async function migrateToNewSchema() {
@@ -258,6 +338,20 @@ export default function Admin() {
             {seedResult}
           </p>
         )}
+        <div className="mt-3">
+          <button
+            onClick={seedNFR}
+            disabled={seedingNFR}
+            className="bg-teal-600 hover:bg-teal-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {seedingNFR ? 'Seeding...' : `Seed: National Film Registry (${NFR_MOVIES.length} films)`}
+          </button>
+          {seedNFRResult && (
+            <p className={`text-sm mt-2 ${seedNFRResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+              {seedNFRResult}
+            </p>
+          )}
+        </div>
       </div>
 
       <input

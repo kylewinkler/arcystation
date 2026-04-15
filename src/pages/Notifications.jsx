@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getNotifications, markAllNotificationsRead, getUserProfile } from '../lib/firestore';
+import { getNotifications, markAllNotificationsRead, getUserProfile, acceptFriendRequest, removeFriend } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import LoadingScreen from '../components/loading/Loading';
 
@@ -19,7 +19,7 @@ function timeAgo(seconds) {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-function NotificationItem({ notification, profile }) {
+function NotificationItem({ notification, profile, friendAction, onFriendAction }) {
   const { type, data } = notification;
 
   let icon, text, link;
@@ -61,6 +61,48 @@ function NotificationItem({ notification, profile }) {
       );
       link = data.listId ? `/lists/${data.listId}` : null;
       break;
+    case 'joined_collection':
+      icon = '🎬';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' started the collection '}
+          <span className="text-white font-medium">{data.listTitle}</span>
+        </>
+      );
+      link = data.listId ? `/lists/${data.listId}` : null;
+      break;
+    case 'list_invite':
+      icon = '✉️';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' invited you to '}
+          <span className="text-white font-medium">{data.listTitle}</span>
+        </>
+      );
+      link = data.listId ? `/lists/${data.listId}` : null;
+      break;
+    case 'friend_request':
+      icon = '👋';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' sent you a friend request'}
+        </>
+      );
+      link = null;
+      break;
+    case 'friend_accepted':
+      icon = '🤝';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' accepted your friend request'}
+        </>
+      );
+      link = notification.fromUid ? `/user/${notification.fromUid}` : null;
+      break;
     default:
       return null;
   }
@@ -79,6 +121,28 @@ function NotificationItem({ notification, profile }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-300 leading-snug">{text}</p>
         <p className="text-xs text-gray-600 mt-1">{timeAgo(notification.createdAt?.seconds)}</p>
+        {type === 'friend_request' && (
+          friendAction ? (
+            <p className="text-xs text-purple-400 mt-2">
+              {friendAction === 'accepted' ? 'Accepted' : 'Declined'}
+            </p>
+          ) : (
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={(e) => { e.preventDefault(); onFriendAction(notification, 'accepted'); }}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+              >
+                Accept
+              </button>
+              <button
+                onClick={(e) => { e.preventDefault(); onFriendAction(notification, 'declined'); }}
+                className="text-gray-400 hover:text-red-400 border border-gray-700 px-3 py-1 rounded-lg text-xs transition-colors"
+              >
+                Decline
+              </button>
+            </div>
+          )
+        )}
       </div>
       {data.posterPath && (
         <img
@@ -103,6 +167,7 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [loading, setLoading] = useState(true);
+  const [friendActions, setFriendActions] = useState({});
 
   useEffect(() => {
     if (!user) return;
@@ -131,6 +196,15 @@ export default function Notifications() {
     setLoading(false);
   }
 
+  const handleFriendAction = async (notification, action) => {
+    setFriendActions((prev) => ({ ...prev, [notification.id]: action }));
+    if (action === 'accepted') {
+      await acceptFriendRequest(notification.fromUid, user.uid);
+    } else {
+      await removeFriend(notification.fromUid, user.uid);
+    }
+  };
+
   if (loading) return <LoadingScreen />;
 
   return (
@@ -151,6 +225,8 @@ export default function Notifications() {
               key={n.id}
               notification={n}
               profile={profiles[n.fromUid]}
+              friendAction={friendActions[n.id]}
+              onFriendAction={handleFriendAction}
             />
           ))}
         </div>

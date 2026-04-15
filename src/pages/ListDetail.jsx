@@ -7,7 +7,7 @@ import {
   getUserProfile, getAllWatchedTmdbIds, getAllWatchedMovies, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
   copyList, getFriends, sendListInvite, getPendingInvitesForList,
-  notifyFriends,
+  notifyFriends, createNotification,
 } from '../lib/firestore';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
@@ -213,6 +213,9 @@ export default function ListDetail() {
   const handleStartList = async () => {
     await startList(user.uid, id);
     loadStarters();
+    if (list?.isPrebuilt) {
+      notifyFriends(user.uid, 'joined_collection', { listTitle: list.title, listId: id });
+    }
   };
 
   const handleOpenInviteModal = async () => {
@@ -233,6 +236,7 @@ export default function ListDetail() {
   const handleSendInvite = async (friendUid) => {
     setInvitingUid(friendUid);
     await sendListInvite(user.uid, friendUid, id, list.title);
+    await createNotification('list_invite', user.uid, friendUid, { listTitle: list.title, listId: id });
     setPendingInviteUids((prev) => new Set([...prev, friendUid]));
     setInviteFriends((prev) => prev.filter((f) => f.uid !== friendUid));
     setInvitingUid(null);
@@ -526,14 +530,12 @@ export default function ListDetail() {
         const seenCount = movies.filter((m) => allMyWatched.has(m.tmdbId)).length;
         if (seenCount === 0) return null;
         return (
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex items-center gap-3">
-            <span className="text-2xl">👁</span>
-            <p className="text-sm text-gray-300">
+            <p className="text-sm text-watched">
               You've seen <span className="text-white font-medium">{seenCount}</span> of{' '}
               <span className="text-white font-medium">{movies.length}</span> movies on this list
               (across other lists)
             </p>
-          </div>
+
         );
       })()}
 

@@ -371,11 +371,19 @@ export async function sendFriendRequest(fromUid, toUid) {
     requestedBy: fromUid,
     createdAt: serverTimestamp(),
   });
+  await createNotification('friend_request', fromUid, toUid, {});
 }
 
 export async function acceptFriendRequest(uid1, uid2) {
   const docId = friendshipId(uid1, uid2);
-  await updateDoc(doc(db, 'friendships', docId), { status: 'accepted' });
+  const docRef = doc(db, 'friendships', docId);
+  const snap = await getDoc(docRef);
+  await updateDoc(docRef, { status: 'accepted' });
+  if (snap.exists()) {
+    const { requestedBy } = snap.data();
+    const acceptedBy = uid1 === requestedBy ? uid2 : uid1;
+    await createNotification('friend_accepted', acceptedBy, requestedBy, {});
+  }
 }
 
 export async function removeFriend(uid1, uid2) {
