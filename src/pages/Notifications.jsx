@@ -83,6 +83,17 @@ function NotificationItem({ notification, profile, friendAction, onFriendAction 
       );
       link = data.listId ? `/lists/${data.listId}` : null;
       break;
+    case 'joined_list':
+      icon = '➕';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' joined your list '}
+          <span className="text-white font-medium">{data.listTitle}</span>
+        </>
+      );
+      link = data.listId ? `/lists/${data.listId}` : null;
+      break;
     case 'friend_request':
       icon = '👋';
       text = (

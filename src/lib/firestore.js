@@ -580,6 +580,10 @@ export async function getPendingInvitesForList(listId) {
 export async function acceptListInvite(inviteId, uid, listId) {
   await updateDoc(doc(db, 'listInvites', inviteId), { status: 'accepted' });
   await startList(uid, listId);
+  const list = await getList(listId);
+  if (list?.createdBy && list.createdBy !== uid) {
+    await createNotification('joined_list', uid, list.createdBy, { listTitle: list.title, listId });
+  }
 }
 
 export async function declineListInvite(inviteId) {
