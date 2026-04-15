@@ -1,14 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { posterUrl } from '../lib/tmdb';
 import {
   getUserAllProgress, getListMovies, getWatchedMovies, getList,
   getUserLists, addMovieToList, removeMovieFromList, createList, startList,
   markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
-  getAllWatchedTmdbIds,
+  getAllWatchedTmdbIds, notifyFriends,
 } from '../lib/firestore';
 import StarRating from '../components/StarRating';
+import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import { MOVIE_NOT_FOUND } from '../lib/copy/empty';
@@ -19,7 +20,7 @@ import RatingModal from '../components/modal/RatingModal';
 
 export default function MovieDetail() {
   const { tmdbId } = useParams();
-  const navigate = useNavigate();
+
   const { user } = useAuth();
   const [movie, setMovie] = useState(null);
   const [fullDetails, setFullDetails] = useState(null);
@@ -133,7 +134,8 @@ export default function MovieDetail() {
         genreIds: fullDetails?.genres?.map((g) => g.id) || [],
       };
       await addMovieToList(listId, movieData);
-      await startList(user.uid, listId, name, 1);
+      await startList(user.uid, listId);
+      notifyFriends(user.uid, 'created_list', { listId, listTitle: name });
       setNewListName('');
       setAddMenuOpen(false);
       // Refresh
@@ -217,12 +219,6 @@ export default function MovieDetail() {
     showWatchedToast(!!rating);
   }
 
-  async function handleUnmark() {
-    if (!confirm('Remove watched status? This will remove your standalone review.')) return;
-    await unmarkWatchedStandalone(user.uid, tmdbId);
-    setStandaloneWatched(null);
-    loadUserData();
-  }
 
   if (loading) {
     return <LoadingScreen />;
@@ -240,12 +236,7 @@ export default function MovieDetail() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <button
-        onClick={() => navigate(-1)}
-        className="text-sm text-gray-400 hover:text-white transition-colors"
-      >
-        ← Back
-      </button>
+      <BackButton />
       <div className="flex gap-6">
         {movie.posterPath ? (
           <img
@@ -295,32 +286,29 @@ export default function MovieDetail() {
       
       {/* Watched status + review */}
       {isWatched && (
-        <div className="bg-purple-600/10 border border-purple-500/30 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center">
-                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <span className="text-purple-300 text-sm font-medium">Watched</span>
-              {displayRating > 0 && (
-                <span className="ml-2"><StarRating value={displayRating} size="sm" /></span>
-              )}
+        <button
+          onClick={() => {
+            setRating(displayRating || 0);
+            setNote(displayNote || '');
+            setRatingModal(true);
+          }}
+          className="w-full bg-purple-600/10 border border-purple-500/30 rounded-lg p-4 text-left hover:border-purple-500 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
+              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-            {!watchedInfo && standaloneWatched && (
-              <button
-                onClick={handleUnmark}
-                className="text-xs text-gray-500 hover:text-red-400 transition-colors"
-              >
-                Remove
-              </button>
+            <span className="text-purple-300 text-sm font-medium">Watched</span>
+            {displayRating > 0 && (
+              <span className="ml-auto"><StarRating value={displayRating} size="sm" /></span>
             )}
           </div>
           {displayNote && (
             <p className="text-gray-300 text-sm mt-2 italic">"{displayNote}"</p>
           )}
-        </div>
+        </button>
       )}
 
       
@@ -477,6 +465,13 @@ export default function MovieDetail() {
         setNote={setNote}
         onCancel={() => setRatingModal(false)}
         onSave={handleMarkWatched}
+        isExisting={isWatched}
+        onDelete={async () => {
+          await unmarkWatchedStandalone(user.uid, tmdbId);
+          setStandaloneWatched(null);
+          setRatingModal(false);
+          loadUserData();
+        }}
       />
     </div>
   );

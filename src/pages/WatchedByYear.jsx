@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getUserProfile, getAllWatchedMovies } from '../lib/firestore';
-import { getGenreList, posterUrl } from '../lib/tmdb';
+import { useParams, useNavigate } from 'react-router-dom';
+import { getUserProfile, getAllWatchedMovies, getAllWatchedTmdbIds } from '../lib/firestore';
+import { getGenreList } from '../lib/tmdb';
+import WatchedPoster from '../components/movies/WatchedPoster';
+import ProfileHeader from '../components/profile/ProfileHeader';
+import BackButton from '../components/BackButton';
 import { useAuth } from '../context/AuthContext';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -18,20 +21,23 @@ export default function WatchedByYear() {
   const [search, setSearch] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('');
   const [loading, setLoading] = useState(true);
+  const [myWatchedIds, setMyWatchedIds] = useState(new Set());
 
   const isOwner = user?.uid === uid;
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [prof, watched, genres] = await Promise.all([
+      const [prof, watched, genres, myIds] = await Promise.all([
         getUserProfile(uid),
         getAllWatchedMovies(uid),
         getGenreList(),
+        user ? getAllWatchedTmdbIds(user.uid) : Promise.resolve(new Set()),
       ]);
       setProfile(prof);
       setAllMovies(watched);
       setGenreMap(genres);
+      setMyWatchedIds(myIds);
       setLoading(false);
     }
     load();
@@ -77,16 +83,9 @@ export default function WatchedByYear() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <Link to={`/user/${uid}`} className="text-sm text-purple-400 hover:text-purple-300">
-          ← {isOwner ? 'Back to profile' : `Back to ${profile?.displayName}`}
-        </Link>
-        <h1 className="text-2xl font-bold text-white mt-1">
-          {`${profile?.displayName}'s`} Movies
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">{yearFiltered.length} movies watched</p>
-      </div>
+      <BackButton to={`/user/${uid}`} label={isOwner ? 'Back to profile' : `Back to ${profile?.displayName}`} />
+      <ProfileHeader profile={profile} isOwner={isOwner} />
+      <p className="text-sm text-gray-500">{yearFiltered.length} movies watched</p>
 
       {/* Filters */}
       <div className="flex gap-3">
@@ -132,25 +131,14 @@ export default function WatchedByYear() {
       {filtered.length > 0 ? (
         <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
           {filtered.map((m) => (
-            <Link
+            <WatchedPoster
               key={m.tmdbId}
-              to={`/movie/${m.tmdbId}`}
-              className="group"
+              tmdbId={m.tmdbId}
               title={m.title}
-            >
-              {m.posterPath ? (
-                <img
-                  src={posterUrl(m.posterPath, 'w185')}
-                  alt={m.title}
-                  className="w-full aspect-[2/3] rounded-lg object-cover ring-1 ring-purple-500/30 group-hover:ring-purple-500 transition-all"
-                />
-              ) : (
-                <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 ring-1 ring-purple-500/30 flex items-center justify-center">
-                  <span className="text-xs text-gray-500 text-center leading-tight px-2">{m.title}</span>
-                </div>
-              )}
-              <p className="text-xs text-gray-400 mt-1 truncate">{m.title}</p>
-            </Link>
+              posterPath={m.posterPath}
+              rating={m.rating}
+              glow={myWatchedIds.has(m.tmdbId)}
+            />
           ))}
         </div>
       ) : (

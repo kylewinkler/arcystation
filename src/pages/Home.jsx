@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getUserAllProgress, getList, getUserProfile, getListMovies, getWatchedMovies,
-  getPinnedLists, pinList, unpinList,
+  getPinnedLists, pinList, unpinList, sortLists,
+  getPendingListInvites, acceptListInvite, declineListInvite,
 } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
@@ -30,6 +31,7 @@ export default function Home() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [lists, setLists] = useState([]);
+  const [invites, setInvites] = useState([]);
   const [continueItem, setContinueItem] = useState(null);
   const [tonightPick, setTonightPick] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -58,12 +60,36 @@ export default function Home() {
     setPinnedIds(newPinned);
   }
 
+  async function handleAcceptInvite(invite) {
+    await acceptListInvite(invite.id, user.uid, invite.listId);
+    setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    loadLists();
+  }
+
+  async function handleDeclineInvite(invite) {
+    await declineListInvite(invite.id);
+    setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+  }
+
   async function loadLists() {
     setLoading(true);
-    const [allProgress, pinned] = await Promise.all([
+    const [allProgress, pinned, pendingInvites] = await Promise.all([
       getUserAllProgress(user.uid),
       getPinnedLists(user.uid),
+      getPendingListInvites(user.uid),
     ]);
+
+    // Enrich invites with sender profiles and list info
+    const enrichedInvites = await Promise.all(
+      pendingInvites.map(async (inv) => {
+        const [fromProfile, listDoc] = await Promise.all([
+          getUserProfile(inv.fromUid),
+          getList(inv.listId),
+        ]);
+        return { ...inv, fromProfile, list: listDoc };
+      })
+    );
+    setInvites(enrichedInvites.filter((inv) => inv.list));
     const pinnedSet = new Set(pinned);
     setPinnedIds(pinnedSet);
 
@@ -82,17 +108,11 @@ export default function Home() {
     );
 
     const valid = enriched.filter(Boolean);
-    valid.sort((a, b) => {
-      const aTime = a.lastActivityAt?.seconds || a.startedAt?.seconds || 0;
-      const bTime = b.lastActivityAt?.seconds || b.startedAt?.seconds || 0;
-      return bTime - aTime;
-    });
-
-    setLists(valid);
+    setLists(sortLists(valid, pinnedSet));
 
     // Find incomplete lists for suggestions — prefer pinned
     const allIncomplete = valid.filter(
-      (item) => item.watchedCount < (item.list.movieCount || item.totalCount || 0)
+      (item) => item.watchedCount < (item.list.movieCount || 0)
     );
     const pinnedIncomplete = allIncomplete.filter((item) => pinnedSet.has(item.listId));
     const incomplete = pinnedIncomplete.length > 0 ? pinnedIncomplete : allIncomplete;
@@ -148,7 +168,7 @@ export default function Home() {
         );
         setTonightPick({
           movie: tonightMovie,
-          listTitle: tonightLists[0]?.listTitle || '',
+          listTitle: tonightLists[0]?.list?.title || '',
           listId: tonightLists[0]?.listId || '',
         });
       }
@@ -163,6 +183,43 @@ export default function Home() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {/* Pending list invites */}
+      {invites.length > 0 && (
+        <div className="space-y-2">
+          {invites.map((invite) => (
+            <div key={invite.id} className="bg-gray-900 border border-purple-500/30 rounded-xl p-4 flex items-center gap-3">
+              {invite.fromProfile?.photoURL ? (
+                <img src={invite.fromProfile.photoURL} alt="" className="w-10 h-10 rounded-full shrink-0" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold shrink-0">
+                  {invite.fromProfile?.displayName?.[0]}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium">
+                  {invite.fromProfile?.displayName} invited you to join
+                </p>
+                <p className="text-purple-400 text-sm font-medium truncate">{invite.list.title}</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => handleAcceptInvite(invite)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                >
+                  Join
+                </button>
+                <button
+                  onClick={() => handleDeclineInvite(invite)}
+                  className="text-gray-400 hover:text-red-400 border border-gray-700 px-3 py-1.5 rounded-lg text-xs transition-colors"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Continue where you left off */}
       {continueItem && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -201,7 +258,7 @@ export default function Home() {
                   <span key={list.id}>
                     {i > 0 && ', '}
                     <Link to={`/lists/${list.id}`} className="text-gray-400 hover:text-purple-400 transition-colors">
-                      {list.title} ({progress.watchedCount}/{list.movieCount || progress.totalCount || 0})
+                      {list.title} ({progress.watchedCount}/{list.movieCount || 0})
                     </Link>
                   </span>
                 ))}
@@ -239,8 +296,8 @@ export default function Home() {
                   <ListCard
                     key={item.id}
                     listId={item.listId}
-                    title={item.listTitle}
-                    total={item.list.movieCount || item.totalCount || 0}
+                    title={item.list.title}
+                    total={item.list.movieCount || 0}
                     watched={item.watchedCount}
                     isOwner={item.list.createdBy === user.uid}
                     creatorName={item.creator?.displayName}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, getDocs, doc, setDoc, arrayUnion } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, addDoc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { getUserLists, getListMovies } from '../lib/firestore';
+import { getUserLists, getListMovies, getPrebuiltLists } from '../lib/firestore';
 
 import { ADMIN_UIDS } from '../lib/admin';
 import LoadingScreen from '../components/loading/Loading';
@@ -20,6 +20,7 @@ export default function Admin() {
 
   useEffect(() => {
     loadUsers();
+    getPrebuiltLists().then(setPrebuiltLists);
   }, []);
 
   async function loadUsers() {
@@ -42,66 +43,142 @@ export default function Admin() {
 
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState(null);
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState(null);
+  const [prebuiltLists, setPrebuiltLists] = useState([]);
 
-  async function migrateWatchedData() {
+  const SCOOBY_DOO_TMDB_IDS = [
+    36972, 24787, 13350, 37211, 13351, 13151, 17681, 20410,
+    15601, 9637, 30074, 21956, 11024, 12902, 24615, 20558,
+    13355, 13354, 12903, 16390, 22620, 32916, 45752, 47533,
+    67900, 81900, 119321, 151535, 210769, 203696, 258893, 284995,
+    302960, 347688, 392536, 409122, 427564, 461054, 484862, 489939,
+    533592, 560066, 615774, 385103, 721656, 682254, 843906, 1015724,
+  ];
+
+  async function seedScoobyDoo() {
+    setSeeding(true);
+    setSeedResult(null);
+    try {
+      const apiKey = import.meta.env.VITE_TMDB_API_KEY;
+
+      // Create the pre-built list
+      const listRef = await addDoc(collection(db, 'lists'), {
+        title: 'The Scooby-Doo Movie Collection',
+        description: 'Every Scooby-Doo movie from 1979 to 2022. Animated classics, live-action films, and everything in between.',
+        createdBy: null,
+        isPrebuilt: true,
+        movieCount: 0,
+        isPublic: false,
+        shareSlug: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const listId = listRef.id;
+      let count = 0;
+      let firstPoster = null;
+
+      for (let i = 0; i < SCOOBY_DOO_TMDB_IDS.length; i++) {
+        const tmdbId = SCOOBY_DOO_TMDB_IDS[i];
+        const res = await fetch(
+          `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}`
+        );
+        const m = await res.json();
+        if (!m.id) continue;
+
+        const movieDoc = {
+          title: m.title || '',
+          posterPath: m.poster_path || null,
+          year: m.release_date ? m.release_date.slice(0, 4) : '',
+          overview: m.overview || '',
+          genreIds: (m.genres || []).map((g) => g.id),
+          order: i,
+          addedAt: serverTimestamp(),
+        };
+
+        await setDoc(doc(db, 'lists', listId, 'movies', String(tmdbId)), movieDoc);
+        if (!firstPoster && m.poster_path) firstPoster = m.poster_path;
+        count++;
+      }
+
+      await updateDoc(doc(db, 'lists', listId), {
+        movieCount: count,
+        ...(firstPoster && { firstPoster }),
+      });
+
+      setSeedResult(`Created "${listRef.id}" with ${count} movies.`);
+      getPrebuiltLists().then(setPrebuiltLists);
+    } catch (err) {
+      console.error('Seed failed:', err);
+      setSeedResult(`Error: ${err.message}`);
+    }
+    setSeeding(false);
+  }
+
+  async function migrateToNewSchema() {
     setMigrating(true);
     setMigrateResult(null);
     try {
-      // Get all userProgress docs
-      const progressSnap = await getDocs(collection(db, 'userProgress'));
-      const byUser = {}; // uid -> [{ listId, watchedTmdbIds }]
+      let membersCreated = 0;
+      let listWatchedCreated = 0;
+      let reviewsCreated = 0;
 
+      // 1. Migrate userProgress → listMembers
+      const progressSnap = await getDocs(collection(db, 'userProgress'));
       for (const pDoc of progressSnap.docs) {
         const p = pDoc.data();
-        const watchedSnap = await getDocs(collection(db, 'userProgress', pDoc.id, 'watched'));
-        if (watchedSnap.empty) continue;
-        if (!byUser[p.uid]) byUser[p.uid] = [];
-        const watchedEntries = {};
-        watchedSnap.docs.forEach((d) => { watchedEntries[d.id] = d.data(); });
-        byUser[p.uid].push({
+        const memberDocId = `${p.uid}__${p.listId}`;
+        await setDoc(doc(db, 'listMembers', memberDocId), {
+          uid: p.uid,
           listId: p.listId,
-          watchedEntries,
-        });
+          joinedAt: p.startedAt || serverTimestamp(),
+          lastActivityAt: p.lastActivityAt || p.startedAt || serverTimestamp(),
+        }, { merge: true });
+        membersCreated++;
+
+        // 2. Migrate userProgress/{id}/watched/{tmdbId} → listWatched
+        const watchedSnap = await getDocs(collection(db, 'userProgress', pDoc.id, 'watched'));
+        for (const wDoc of watchedSnap.docs) {
+          const w = wDoc.data();
+          const tmdbId = wDoc.id;
+          const watchedDocId = `${p.uid}__${p.listId}__${tmdbId}`;
+          await setDoc(doc(db, 'listWatched', watchedDocId), {
+            uid: p.uid,
+            listId: p.listId,
+            tmdbId,
+            watchedAt: w.watchedAt || serverTimestamp(),
+          }, { merge: true });
+          listWatchedCreated++;
+        }
       }
 
-      let usersUpdated = 0;
-      let moviesBackfilled = 0;
+      // 3. Migrate userWatched/{uid} mega-docs → reviews/{uid__tmdbId}
+      const userWatchedSnap = await getDocs(collection(db, 'userWatched'));
+      for (const uwDoc of userWatchedSnap.docs) {
+        const uid = uwDoc.id;
+        const data = uwDoc.data();
+        const movies = data.movies || {};
 
-      for (const [uid, entries] of Object.entries(byUser)) {
-        const allTmdbIds = [];
-        const moviesMap = {};
+        for (const [tmdbId, meta] of Object.entries(movies)) {
+          const reviewDocId = `${uid}__${tmdbId}`;
+          const entry = { uid, tmdbId };
+          if (meta.watchedAt) entry.watchedAt = meta.watchedAt;
+          else entry.watchedAt = serverTimestamp();
+          if (meta.title) entry.title = meta.title;
+          if (meta.year) entry.year = meta.year;
+          if (meta.posterPath) entry.posterPath = meta.posterPath;
+          if (meta.genreIds?.length > 0) entry.genreIds = meta.genreIds;
+          if (meta.rating != null) entry.rating = meta.rating;
+          if (meta.note != null) entry.note = meta.note;
 
-        for (const { listId, watchedEntries } of entries) {
-          const listMovies = await getListMovies(listId);
-          const movieLookup = {};
-          listMovies.forEach((m) => { movieLookup[m.tmdbId] = m; });
-
-          for (const [tmdbId, watchData] of Object.entries(watchedEntries)) {
-            allTmdbIds.push(tmdbId);
-            const m = movieLookup[tmdbId];
-            if (!moviesMap[tmdbId]) {
-              moviesMap[tmdbId] = {
-                ...(m && { title: m.title || '', year: m.year || '', posterPath: m.posterPath || null }),
-                ...(m?.genreIds?.length > 0 && { genreIds: m.genreIds }),
-                ...(watchData.rating != null && { rating: watchData.rating }),
-                ...(watchData.note != null && { note: watchData.note }),
-                ...(watchData.watchedAt && { watchedAt: watchData.watchedAt }),
-              };
-              moviesBackfilled++;
-            }
-          }
+          await setDoc(doc(db, 'reviews', reviewDocId), entry, { merge: true });
+          reviewsCreated++;
         }
-
-        // Merge into userWatched doc
-        const updates = { tmdbIds: arrayUnion(...allTmdbIds) };
-        for (const [tmdbId, meta] of Object.entries(moviesMap)) {
-          updates[`movies.${tmdbId}`] = meta;
-        }
-        await setDoc(doc(db, 'userWatched', uid), updates, { merge: true });
-        usersUpdated++;
       }
 
-      setMigrateResult(`Done. Updated ${usersUpdated} users, backfilled ${moviesBackfilled} movies.`);
+      setMigrateResult(
+        `Done. ${membersCreated} list memberships, ${listWatchedCreated} list-watched entries, ${reviewsCreated} reviews migrated.`
+      );
     } catch (err) {
       console.error('Migration failed:', err);
       setMigrateResult(`Error: ${err.message}`);
@@ -136,18 +213,49 @@ export default function Admin() {
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-sm font-medium text-white mb-2">Data Migration</h2>
         <p className="text-xs text-gray-500 mb-3">
-          Backfill userWatched docs from existing progress data. Safe to run multiple times.
+          Migrate old schema (userProgress + userWatched) → new schema (listMembers + listWatched + reviews). Safe to run multiple times.
         </p>
         <button
-          onClick={migrateWatchedData}
+          onClick={migrateToNewSchema}
           disabled={migrating}
           className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
-          {migrating ? 'Migrating...' : 'Backfill Watched Data'}
+          {migrating ? 'Migrating...' : 'Migrate to New Schema'}
         </button>
         {migrateResult && (
           <p className={`text-sm mt-2 ${migrateResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
             {migrateResult}
+          </p>
+        )}
+      </div>
+
+      {/* Pre-built lists */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 className="text-sm font-medium text-white mb-2">Pre-built Collections</h2>
+        {prebuiltLists.length > 0 ? (
+          <div className="space-y-2 mb-3">
+            {prebuiltLists.map((l) => (
+              <Link key={l.id} to={`/lists/${l.id}`} className="block bg-gray-800/50 rounded-lg p-3 hover:bg-gray-800 transition-colors">
+                <div className="flex items-center justify-between">
+                  <span className="text-white text-sm font-medium">{l.title}</span>
+                  <span className="text-xs text-gray-500">{l.movieCount || 0} movies</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 mb-3">No pre-built lists yet.</p>
+        )}
+        <button
+          onClick={seedScoobyDoo}
+          disabled={seeding}
+          className="bg-teal-600 hover:bg-teal-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          {seeding ? 'Seeding...' : 'Seed: Scooby-Doo Collection'}
+        </button>
+        {seedResult && (
+          <p className={`text-sm mt-2 ${seedResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+            {seedResult}
           </p>
         )}
       </div>

@@ -6,8 +6,9 @@ import { getAllWatchedTmdbIds, getAllWatchedMovies } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import { DISCOVER_NO_RESULTS, WATCHED_NO_MATCHES, WATCHED_NONE } from '../lib/copy/empty';
-import StarRating from '../components/StarRating';
 import SuggestionCard from '../components/movies/SuggestionCard';
+import WatchedPoster from '../components/movies/WatchedPoster';
+import QuickActionModal from '../components/modal/QuickActionModal';
 
 const DISCOVER_TABS = [
   { key: 'popular', label: 'Popular' },
@@ -15,30 +16,49 @@ const DISCOVER_TABS = [
   { key: 'now_playing', label: 'Now Playing' },
 ];
 
+const STORAGE_KEY = 'movies_discover_state';
+const SCROLL_KEY = 'movies_scroll_y';
+
+function getSavedState() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export default function Movies() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialGenre = searchParams.get('genre') || '';
   const initialSection = searchParams.get('section') || 'discover';
 
+  // Restore saved discover state if available
+  const [restored] = useState(() => getSavedState());
+  const didRestore = !!restored?.movies?.length;
+  const hasRestoredScroll = useRef(false);
+
   // Top-level section
   const [section, setSection] = useState(initialSection);
 
   // ── Discover state ──
-  const [discoverTab, setDiscoverTab] = useState('popular');
-  const [discoverMovies_, setDiscoverMovies] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [discoverLoading, setDiscoverLoading] = useState(true);
+  const [discoverTab, setDiscoverTab] = useState(restored?.discoverTab || 'popular');
+  const [discoverMovies_, setDiscoverMovies] = useState(restored?.movies || []);
+  const [page, setPage] = useState(restored?.page || 1);
+  const [totalPages, setTotalPages] = useState(restored?.totalPages || 1);
+  const [discoverLoading, setDiscoverLoading] = useState(!didRestore);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [discoverSearch, setDiscoverSearch] = useState('');
-  const [discoverGenre, setDiscoverGenre] = useState(initialGenre);
+  const [discoverSearch, setDiscoverSearch] = useState(restored?.search || '');
+  const [discoverGenre, setDiscoverGenre] = useState(initialGenre || restored?.genre || '');
   const [genres, setGenres] = useState({});
   const [watched, setWatched] = useState(new Set());
   const [recs, setRecs] = useState([]);
   const [recsLoaded, setRecsLoaded] = useState(false);
   const [recSeedTitle, setRecSeedTitle] = useState('');
   const discoverDebounce = useRef(null);
+  const mountedRef = useRef(false);
+
+  // ── Quick action modal ──
+  const [quickActionMovie, setQuickActionMovie] = useState(null);
 
   // ── Watched state ──
   const [watchedMovies, setWatchedMovies] = useState([]);
@@ -59,13 +79,11 @@ export default function Movies() {
     if (!user || recsLoaded) return;
     getAllWatchedMovies(user.uid).then(async (movies) => {
       if (movies.length === 0) { setRecsLoaded(true); return; }
-      // Sort by rating desc, then pick the top-rated
       const rated = movies.filter((m) => m.rating > 0).sort((a, b) => b.rating - a.rating);
       const seed = rated[0] || movies[Math.floor(Math.random() * movies.length)];
       if (!seed?.tmdbId) { setRecsLoaded(true); return; }
       try {
         const results = await getRecommendations(seed.tmdbId);
-        // Filter out movies the user already watched
         const unseen = results.filter((m) => !watched.has(m.tmdbId));
         setRecs(unseen.slice(0, 10));
         setRecSeedTitle(seed.title || '');
@@ -77,14 +95,18 @@ export default function Movies() {
   }, [user, watched]);
 
   // ── Discover effects ──
+  // Only fetch on tab/genre/section change AFTER initial mount
   useEffect(() => {
+    if (!mountedRef.current) return; // skip first render
     if (section !== 'discover') return;
     if (discoverSearch.trim()) return;
     setPage(1);
     loadDiscover(1, false);
   }, [discoverTab, discoverGenre, section]);
 
+  // Search effect — only after mount
   useEffect(() => {
+    if (!mountedRef.current) return;
     if (section !== 'discover') return;
     clearTimeout(discoverDebounce.current);
     if (!discoverSearch.trim()) {
@@ -93,6 +115,52 @@ export default function Movies() {
     }
     discoverDebounce.current = setTimeout(() => loadSearch(), 300);
   }, [discoverSearch]);
+
+  // On mount: fetch only if we did NOT restore
+  useEffect(() => {
+    mountedRef.current = true;
+    if (!didRestore && section === 'discover') {
+      loadDiscover(1, false);
+    }
+  }, []);
+
+  // ── Save discover state to sessionStorage ──
+  useEffect(() => {
+    if (!mountedRef.current || section !== 'discover' || discoverLoading) return;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      discoverTab,
+      movies: discoverMovies_,
+      page,
+      totalPages,
+      search: discoverSearch,
+      genre: discoverGenre,
+    }));
+  }, [discoverMovies_, discoverTab, page, totalPages, discoverSearch, discoverGenre, section, discoverLoading]);
+
+  // ── Save scroll position ──
+  useEffect(() => {
+    let ticking = false;
+    function onScroll() {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(() => {
+          sessionStorage.setItem(SCROLL_KEY, String(window.scrollY));
+          ticking = false;
+        });
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // ── Restore scroll position after restored movies render ──
+  useEffect(() => {
+    if (didRestore && discoverMovies_.length > 0 && !hasRestoredScroll.current) {
+      hasRestoredScroll.current = true;
+      const y = parseInt(sessionStorage.getItem(SCROLL_KEY) || '0', 10);
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
+    }
+  }, [discoverMovies_]);
 
   async function loadDiscover(pg, append) {
     if (!append) setDiscoverLoading(true);
@@ -264,7 +332,7 @@ export default function Movies() {
             <NotFound title={DISCOVER_NO_RESULTS.title} subtitle={DISCOVER_NO_RESULTS.subtitle} scene={DISCOVER_NO_RESULTS.scene} />
           ) : (
             <>
-              <MovieGrid movies={discoverMovies_} watched={watched} />
+              <MovieGrid movies={discoverMovies_} watched={watched} onQuickAction={setQuickActionMovie} />
               {!discoverSearch.trim() && page < totalPages && (
                 <div className="text-center pt-2 pb-4">
                   <button
@@ -332,30 +400,13 @@ export default function Movies() {
               {watchedFiltered.length > 0 ? (
                 <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
                   {watchedFiltered.map((m) => (
-                    <Link
+                    <WatchedPoster
                       key={m.tmdbId}
-                      to={`/movie/${m.tmdbId}`}
-                      className="group"
+                      tmdbId={m.tmdbId}
                       title={m.title}
-                    >
-                      {m.posterPath ? (
-                        <img
-                          src={posterUrl(m.posterPath, 'w185')}
-                          alt={m.title}
-                          className="w-full aspect-[2/3] rounded-lg object-cover ring-1 ring-purple-500/30 group-hover:ring-purple-500 transition-all"
-                        />
-                      ) : (
-                        <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 ring-1 ring-purple-500/30 flex items-center justify-center">
-                          <span className="text-xs text-gray-500 text-center leading-tight px-2">{m.title}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-gray-400 mt-1 truncate">{m.title}</p>
-                      {m.rating > 0 && (
-                        <div className="mt-0.5">
-                          <StarRating value={m.rating} size="sm" />
-                        </div>
-                      )}
-                    </Link>
+                      posterPath={m.posterPath}
+                      rating={m.rating}
+                    />
                   ))}
                 </div>
               ) : (
@@ -369,12 +420,22 @@ export default function Movies() {
           )}
         </>
       )}
+
+      {/* Quick action modal */}
+      <QuickActionModal
+        isOpen={!!quickActionMovie}
+        onClose={() => setQuickActionMovie(null)}
+        movie={quickActionMovie}
+        user={user}
+        watched={watched}
+        setWatched={setWatched}
+      />
     </div>
   );
 }
 
 // Shared poster grid for discover results
-function MovieGrid({ movies, watched }) {
+function MovieGrid({ movies, watched, onQuickAction }) {
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
       {movies.map((m) => {
@@ -390,21 +451,25 @@ function MovieGrid({ movies, watched }) {
                 src={posterUrl(m.posterPath, 'w185')}
                 alt=""
                 className={`w-full aspect-[2/3] rounded-lg object-cover transition-all group-hover:ring-2 ring-purple-500 ${
-                  isSeen ? 'ring-1 ring-green-500/40' : ''
+                  isSeen ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''
                 }`}
               />
             ) : (
-              <div className="w-full aspect-[2/3] rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-600">
+              <div className={`w-full aspect-[2/3] rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-600 ${
+                isSeen ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''
+              }`}>
                 No img
               </div>
             )}
-            {isSeen && (
-              <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-green-600 flex items-center justify-center">
-                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-            )}
+            {/* Quick action button */}
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onQuickAction(m); }}
+              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-gray-900/80 flex items-center justify-center text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-purple-600"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
             <p className="text-xs text-gray-400 mt-1.5 truncate group-hover:text-white transition-colors">
               {m.title}
             </p>

@@ -16,7 +16,9 @@
       "Bash(\"C:\\\\Users\\\\winks\\\\approot\\\\movies\\\\src\\\\pages\\\\Home.jsx\")",
       "Bash(find /c/Users/winks/approot/movies/src -type f \\\\\\(-name *.jsx -o -name *.js \\\\\\))",
       "Bash(find /c/Users/winks/approot/movies/src -type f \\\\\\(-name *.js -o -name *.jsx \\\\\\))",
-      "Bash(ls \"C:\\\\Users\\\\winks\\\\approot\\\\movies\\\\src\\\\components\\\\modal\"\" 2>/dev/null || echo \"no modal dir \")"
+      "Bash(ls \"C:\\\\Users\\\\winks\\\\approot\\\\movies\\\\src\\\\components\\\\modal\"\" 2>/dev/null || echo \"no modal dir \")",
+      "Bash(node -e ':*)",
+      "WebFetch(domain:api.themoviedb.org)"
     ]
   }
 }

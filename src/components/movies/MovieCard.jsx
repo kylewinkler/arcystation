@@ -16,18 +16,16 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
     <div
       onClick={handleCardClick}
       className={`flex items-start gap-3 rounded-lg p-3 transition-all ${
-        isWatched
-          ? 'bg-gray-800 ring-1 ring-purple-500/40'
-          : seenElsewhere
-            ? 'bg-gray-900/50 ring-1 ring-green-500/20'
-            : 'bg-gray-900/50'
+        isWatched || seenElsewhere
+          ? 'bg-gray-800 shadow-[0_0_8px_var(--color-watched-glow)]'
+          : 'bg-gray-900/50'
       } ${isInteractive ? 'cursor-pointer hover:bg-gray-800/70' : ''}`}
     >
       {/* Clickable watch indicator (replaces old checkbox) */}
       {isInteractive && (
         <div className="shrink-0 pt-1">
           {isWatched ? (
-            <div className="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-full bg-watched flex items-center justify-center">
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
@@ -63,7 +61,7 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
           </span>
         )}
         {seenElsewhere && !isWatched && (
-          <p className="text-green-400 text-xs mt-0.5">You've seen this</p>
+          <p className="text-watched text-xs mt-0.5">You've seen this</p>
         )}
         {movie.overview && !isWatched && (
           <p className="text-gray-600 text-xs mt-1 line-clamp-2">{movie.overview}</p>

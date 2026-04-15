@@ -23,6 +23,11 @@
   --color-teal: #14B8A6;
   --color-teal-soft: #2DD4BF;
 
+  --color-watched: #FFA726;
+  --color-watched-glow: #FFA726;
+  --color-listed: #22EE66;
+  --color-listed-soft: #22EE6660;
+
   --animate-float: float 3.2s ease-in-out infinite;
   --animate-fade-in-up: fade-in-up 0.4s ease-out;
   --animate-fade-out-down: fade-out-down 0.3s ease-in forwards;

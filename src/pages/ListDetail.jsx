@@ -6,14 +6,16 @@ import {
   startList, deleteList, enablePublicShare, disablePublicShare, setFeaturedMovie,
   getUserProfile, getAllWatchedTmdbIds, getAllWatchedMovies, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
-  copyList,
+  copyList, getFriends, sendListInvite, getPendingInvitesForList,
+  notifyFriends,
 } from '../lib/firestore';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
 import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
 import ArcyCopyReel from '../assets/images/arcy-poses/arcy-copy-reel.png';
-import { doc, deleteDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
+import { doc, deleteDoc, getDocs, query, where, collection, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { getGenreList } from '../lib/tmdb';
 import MovieCard from '../components/movies/MovieCard';
 import ProgressBar from '../components/lists/ProgressBar';
 import StarRating from '../components/StarRating';
@@ -55,12 +57,25 @@ export default function ListDetail() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteFriends, setInviteFriends] = useState([]);
+  const [pendingInviteUids, setPendingInviteUids] = useState(new Set());
+  const [invitingUid, setInvitingUid] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hideWatched, setHideWatched] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState('');
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [genres, setGenres] = useState({});
   const menuRef = useRef(null);
 
   const { showToast } = useToast();
   const isOwner = list?.createdBy === user?.uid;
+  const isPrebuilt = list?.isPrebuilt === true;
   const isViewingSelf = !viewerUid || viewerUid === user?.uid;
   const targetUid = viewerUid || user?.uid;
+
+  // Load genre map
+  useEffect(() => { getGenreList().then(setGenres); }, []);
 
   // Subscribe to list + movies
   useEffect(() => {
@@ -165,14 +180,19 @@ export default function ListDetail() {
   };
 
   const handleStopTracking = async () => {
-    const progressId = `${user.uid}__${id}`;
-    const watchedSnap = await getDocs(collection(db, 'userProgress', progressId, 'watched'));
+    // Delete listWatched docs for this user + list
+    const watchedSnap = await getDocs(query(
+      collection(db, 'listWatched'),
+      where('uid', '==', user.uid),
+      where('listId', '==', id)
+    ));
     if (!watchedSnap.empty) {
       const batch = writeBatch(db);
       watchedSnap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
-    await deleteDoc(doc(db, 'userProgress', progressId));
+    // Delete membership
+    await deleteDoc(doc(db, 'listMembers', `${user.uid}__${id}`));
     setShowLeaveModal(false);
     if (!isOwner) navigate('/');
   };
@@ -191,8 +211,32 @@ export default function ListDetail() {
   };
 
   const handleStartList = async () => {
-    await startList(user.uid, id, list.title, movies.length);
+    await startList(user.uid, id);
     loadStarters();
+  };
+
+  const handleOpenInviteModal = async () => {
+    setShowMenu(false);
+    setShowInviteModal(true);
+    const [friendUids, pendingInvites] = await Promise.all([
+      getFriends(user.uid),
+      getPendingInvitesForList(id),
+    ]);
+    const starterUids = new Set(starters.map((s) => s.uid));
+    const pendingUids = new Set(pendingInvites.map((i) => i.toUid));
+    setPendingInviteUids(pendingUids);
+    const eligibleUids = friendUids.filter((uid) => !starterUids.has(uid) && !pendingUids.has(uid));
+    const profiles = await Promise.all(eligibleUids.map((uid) => getUserProfile(uid)));
+    setInviteFriends(profiles.filter(Boolean));
+  };
+
+  const handleSendInvite = async (friendUid) => {
+    setInvitingUid(friendUid);
+    await sendListInvite(user.uid, friendUid, id, list.title);
+    setPendingInviteUids((prev) => new Set([...prev, friendUid]));
+    setInviteFriends((prev) => prev.filter((f) => f.uid !== friendUid));
+    setInvitingUid(null);
+    showToast({ message: 'Invite sent!' });
   };
 
   const handleToggleWatched = async (tmdbId, shouldWatch) => {
@@ -228,6 +272,24 @@ export default function ListDetail() {
     });
     setRatingModal(null);
     showWatchedToast(!!rating);
+
+    // Notify friends about watched movie (fire-and-forget)
+    notifyFriends(user.uid, 'watched_movie', {
+      movieTitle: movie?.title,
+      tmdbId: movie?.tmdbId,
+      posterPath: movie?.posterPath || null,
+      listTitle: list?.title,
+      listId: id,
+    });
+
+    // Check if user just finished the list
+    const watchedAfter = Object.keys(myWatched).length + 1;
+    if (watchedAfter >= movies.length && movies.length > 0) {
+      notifyFriends(user.uid, 'finished_list', {
+        listTitle: list?.title,
+        listId: id,
+      });
+    }
   };
 
   const handleCancelRating = () => {
@@ -283,6 +345,35 @@ export default function ListDetail() {
     });
   });
 
+  // Sort: featured first, then by order
+  const sortedMovies = [...movies].sort((a, b) => {
+    const aFeat = list?.featuredMovie?.tmdbId === a.tmdbId ? -1 : 0;
+    const bFeat = list?.featuredMovie?.tmdbId === b.tmdbId ? -1 : 0;
+    return aFeat - bFeat;
+  });
+
+  // Filter
+  const filteredMovies = sortedMovies.filter((movie) => {
+    if (searchQuery && !movie.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (hideWatched && displayWatched[movie.tmdbId]) return false;
+    if (selectedGenre && !(movie.genreIds || []).includes(Number(selectedGenre))) return false;
+    return true;
+  });
+
+  // Available genres from all movies in this list
+  const availableGenres = {};
+  movies.forEach((m) => {
+    (m.genreIds || []).forEach((gid) => {
+      if (genres[gid]) availableGenres[gid] = genres[gid];
+    });
+  });
+  const sortedGenreEntries = Object.entries(availableGenres).sort((a, b) => a[1].localeCompare(b[1]));
+
+  // Paginate
+  const visibleMovies = filteredMovies.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredMovies.length;
+  const isFiltered = searchQuery || hideWatched || selectedGenre;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
@@ -292,7 +383,9 @@ export default function ListDetail() {
             <h1 className="text-2xl font-bold text-white">{list.title}</h1>
             {list.description && <p className="text-gray-400 mt-1 text-sm">{list.description}</p>}
             <div className="flex items-center gap-2 mt-2">
-              {isOwner ? (
+              {isPrebuilt ? (
+                <span className="text-xs text-teal-400">Collection</span>
+              ) : isOwner ? (
                 <span className="text-xs text-purple-400">Your list</span>
               ) : ownerProfile ? (
                 <Link to={`/user/${ownerProfile.uid}`} className="flex items-center gap-1.5 group">
@@ -326,7 +419,7 @@ export default function ListDetail() {
             </button>
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-40">
-                {isOwner && (
+                {isOwner && !isPrebuilt && (
                   <>
                     <Link
                       to={`/lists/${id}/edit`}
@@ -335,6 +428,12 @@ export default function ListDetail() {
                     >
                       Edit List
                     </Link>
+                    <button
+                      onClick={handleOpenInviteModal}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                    >
+                      Invite Friend
+                    </button>
                     <button
                       onClick={() => { setShowMenu(false); setShowDeleteModal(true); }}
                       className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 transition-colors"
@@ -348,7 +447,7 @@ export default function ListDetail() {
                     onClick={() => { setShowMenu(false); handleStartList(); }}
                     className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
                   >
-                    Start List
+                    {isPrebuilt ? 'Start Collection' : `Join ${ownerProfile?.displayName ? `${ownerProfile.displayName}'s` : 'this'} list`}
                   </button>
                 )}
                 {!isOwner && (
@@ -364,7 +463,7 @@ export default function ListDetail() {
                     onClick={() => { setShowMenu(false); setShowLeaveModal(true); }}
                     className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 transition-colors"
                   >
-                    Leave List
+                    {isPrebuilt ? 'Leave Collection' : 'Leave List'}
                   </button>
                 )}
               </div>
@@ -410,7 +509,7 @@ export default function ListDetail() {
       {!isViewingSelf && displayProgress && (
         <>
           <p className="text-md text-gray-400 mb-2"><Link to={`/user/${viewerProfile?.uid || targetUid}`} className="text-white hover:text-purple-400 transition-colors">{viewerProfile?.displayName}</Link>'s progress</p>
-          <ProgressBar watched={displayProgress.watchedCount} total={movies.length} />
+          <ProgressBar watched={Object.keys(displayWatched).length} total={movies.length} />
         </>
       )}
 
@@ -418,7 +517,7 @@ export default function ListDetail() {
       {isViewingSelf && myProgress && (
         <>
           <p className="text-md text-gray-400 mb-2">Your progress</p>
-          <ProgressBar watched={myProgress.watchedCount} total={movies.length} />
+          <ProgressBar watched={Object.keys(myWatched).length} total={movies.length} />
         </>
       )}
 
@@ -438,27 +537,81 @@ export default function ListDetail() {
         );
       })()}
 
-      {/* Movie list */}
-      <div className="space-y-2">
-        {[...movies].sort((a, b) => {
-          const aFeat = list.featuredMovie?.tmdbId === a.tmdbId ? -1 : 0;
-          const bFeat = list.featuredMovie?.tmdbId === b.tmdbId ? -1 : 0;
-          return aFeat - bFeat;
-        }).map((movie) => (
-          <MovieCard
-            key={movie.tmdbId}
-            movie={movie}
-            watchedData={displayWatched[movie.tmdbId] ? { ...displayWatched[movie.tmdbId], ...(displayRatings[movie.tmdbId] || {}) } : undefined}
-            onToggleWatched={canCheckMovies ? handleToggleWatched : undefined}
-            readonly={!canCheckMovies}
-            seenElsewhere={allMyWatched.has(movie.tmdbId)}
-            isFeatured={list.featuredMovie?.tmdbId === movie.tmdbId}
-            onToggleFeatured={isOwner ? async (m) => {
-              await setFeaturedMovie(id, list.featuredMovie?.tmdbId === m.tmdbId ? null : m);
-            } : undefined}
+      {/* Filters */}
+      {movies.length > 0 && (
+        <div className="space-y-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(20); }}
+            placeholder="Search movies..."
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
           />
-        ))}
-      </div>
+          <div className="flex items-center gap-3">
+            {myProgress && (
+              <button
+                onClick={() => { setHideWatched((v) => !v); setVisibleCount(20); }}
+                className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                  hideWatched
+                    ? 'bg-purple-600/20 border-purple-500/50 text-purple-300'
+                    : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-600'
+                }`}
+              >
+                {hideWatched ? 'Showing unwatched' : 'Hide watched'}
+              </button>
+            )}
+            {sortedGenreEntries.length > 0 && (
+              <select
+                value={selectedGenre}
+                onChange={(e) => { setSelectedGenre(e.target.value); setVisibleCount(20); }}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500"
+              >
+                <option value="">All genres</option>
+                {sortedGenreEntries.map(([gid, name]) => (
+                  <option key={gid} value={gid}>{name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          {isFiltered && (
+            <p className="text-sm text-gray-500">
+              {filteredMovies.length} of {movies.length} movies
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Movie list */}
+      {filteredMovies.length === 0 && movies.length > 0 ? (
+        <p className="text-center text-gray-500 py-8 text-sm">No movies match your filters.</p>
+      ) : (
+        <div className="space-y-2">
+          {visibleMovies.map((movie) => (
+            <MovieCard
+              key={movie.tmdbId}
+              movie={movie}
+              watchedData={displayWatched[movie.tmdbId] ? { ...displayWatched[movie.tmdbId], ...(displayRatings[movie.tmdbId] || {}) } : undefined}
+              onToggleWatched={canCheckMovies ? handleToggleWatched : undefined}
+              readonly={!canCheckMovies}
+              seenElsewhere={allMyWatched.has(movie.tmdbId)}
+              isFeatured={list.featuredMovie?.tmdbId === movie.tmdbId}
+              onToggleFeatured={isOwner && !isPrebuilt ? async (m) => {
+                await setFeaturedMovie(id, list.featuredMovie?.tmdbId === m.tmdbId ? null : m);
+              } : undefined}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Load more */}
+      {hasMore && (
+        <button
+          onClick={() => setVisibleCount((v) => v + 20)}
+          className="w-full py-3 text-sm font-medium text-purple-400 hover:text-white bg-gray-900 border border-gray-800 rounded-lg hover:border-purple-500 transition-colors"
+        >
+          Load more ({filteredMovies.length - visibleCount} remaining)
+        </button>
+      )}
 
       <RatingModal
         isOpen={!!ratingModal}
@@ -517,6 +670,52 @@ export default function ListDetail() {
           onConfirm={handleConfirmUnmark}
           onCancel={() => setUnmarkModal(null)}
         />
+      )}
+
+      {/* Invite friend modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteModal(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-sm w-full p-5" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-white mb-4">Invite a Friend</h2>
+            {inviteFriends.length === 0 ? (
+              <p className="text-gray-400 text-sm">
+                {pendingInviteUids.size > 0
+                  ? 'All your friends have been invited or are already on this list.'
+                  : 'No friends available to invite.'}
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {inviteFriends.map((friend) => (
+                  <div key={friend.uid} className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-3">
+                    {friend.photoURL ? (
+                      <img src={friend.photoURL} alt="" className="w-8 h-8 rounded-full" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
+                        {friend.displayName?.[0]}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-medium truncate">{friend.displayName}</p>
+                    </div>
+                    <button
+                      onClick={() => handleSendInvite(friend.uid)}
+                      disabled={invitingUid === friend.uid}
+                      className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0"
+                    >
+                      {invitingUid === friend.uid ? 'Sending...' : 'Invite'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setShowInviteModal(false)}
+              className="mt-4 w-full text-center text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

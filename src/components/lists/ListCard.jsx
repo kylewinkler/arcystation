@@ -9,6 +9,7 @@ export default function ListCard({
   watched,
   creatorName,
   isOwner,
+  isPrebuilt,
   to,
   pinned,
   onTogglePin,
@@ -31,13 +32,14 @@ export default function ListCard({
         />
       )}
       <div className="flex-1 min-w-0 p-4">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <h3 className="text-white font-medium truncate">{title}</h3>
-          </div>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <h3 className="text-white font-medium line-clamp-2">{title}</h3>
           <div className="flex items-center gap-2 shrink-0">
-            {isOwner && <span className="text-xs text-purple-400">yours</span>}
-            {!isOwner && creatorName && (
+            {isPrebuilt && (
+              <span className="text-xs text-teal-400">collection</span>
+            )}
+            {!isPrebuilt && isOwner && <span className="text-xs text-purple-400">yours</span>}
+            {!isPrebuilt && !isOwner && creatorName && (
               <span className="text-xs text-gray-500">by {creatorName}</span>
             )}
             {onTogglePin && (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createList, addMovieToList } from '../lib/firestore';
+import { createList, addMovieToList, notifyFriends } from '../lib/firestore';
 import MovieSearch from '../components/movies/MovieSearch';
 import { posterUrl } from '../lib/tmdb';
 
@@ -54,6 +54,10 @@ export default function CreateList() {
       for (const movie of movies) {
         await addMovieToList(listId, movie);
       }
+      notifyFriends(user.uid, 'created_list', {
+        listId,
+        listTitle: title.trim(),
+      });
       navigate(`/lists/${listId}`);
     } catch (err) {
       console.error('Failed to create list:', err);

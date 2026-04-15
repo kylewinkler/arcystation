@@ -74,7 +74,7 @@ export default function Friends() {
         return fProgress.map((p) => ({ ...p, friend: fProfile }));
       });
       const allFriendProgress = (await Promise.all(friendProgressPromises)).flat();
-      allFriendProgress.sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0));
+      allFriendProgress.sort((a, b) => (b.joinedAt?.seconds || 0) - (a.joinedAt?.seconds || 0));
       setFriendActivity(allFriendProgress.slice(0, 10));
     }
 
@@ -172,46 +172,7 @@ export default function Friends() {
           <p className="text-sm text-gray-500 mt-2">{FRIENDS_NO_RESULTS.title}</p>
         )}
       </div>
-
-      {/* Friend Activity */}
-      {friendActivity.length > 0 && (
-        <div>
-          <h2 className="text-lg font-bold text-white mb-3">Friend Activity</h2>
-          <div className="space-y-2">
-            {friendActivity.map((activity) => (
-              <Link
-                key={activity.id}
-                to={`/lists/${activity.listId}?viewer=${activity.uid}`}
-                className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-lg p-3 hover:border-purple-500 transition-colors"
-              >
-                {activity.friend?.photoURL ? (
-                  <img src={activity.friend.photoURL} alt="" className="w-8 h-8 rounded-full" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
-                    {activity.friend?.displayName?.[0] || '?'}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <span className="text-white text-sm font-medium">{activity.friend?.displayName}</span>
-                  <span className="text-gray-400 text-sm"> started </span>
-                  <span className="text-white text-sm font-medium">{activity.listTitle}</span>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className="text-sm text-gray-500">
-                    {activity.watchedCount}/{activity.totalCount}
-                  </span>
-                  {activity.startedAt?.seconds && (
-                    <p className="text-xs text-gray-600">
-                      {timeAgo(activity.startedAt.seconds * 1000)}
-                    </p>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
+      
       {/* Suggested friends */}
       {suggested.length > 0 && (
         <div>
