@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getNotifications, markAllNotificationsRead, getUserProfile, acceptFriendRequest, removeFriend } from '../lib/firestore';
+import { getNotifications, markAllNotificationsRead, getUserProfile, acceptFriendRequest, removeFriend, deleteNotification } from '../lib/firestore';
 import { posterUrl } from '../lib/tmdb';
 import LoadingScreen from '../components/loading/Loading';
 
@@ -19,14 +19,14 @@ function timeAgo(seconds) {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-function NotificationItem({ notification, profile, friendAction, onFriendAction }) {
+function NotificationItem({ notification, profile, onFriendAction }) {
   const { type, data } = notification;
 
   let icon, text, link;
 
   switch (type) {
     case 'watched_movie':
-      icon = '👁';
+      icon = null;
       text = (
         <>
           <span className="text-white font-medium">{profile?.displayName}</span>
@@ -133,26 +133,20 @@ function NotificationItem({ notification, profile, friendAction, onFriendAction 
         <p className="text-sm text-gray-300 leading-snug">{text}</p>
         <p className="text-xs text-gray-600 mt-1">{timeAgo(notification.createdAt?.seconds)}</p>
         {type === 'friend_request' && (
-          friendAction ? (
-            <p className="text-xs text-purple-400 mt-2">
-              {friendAction === 'accepted' ? 'Accepted' : 'Declined'}
-            </p>
-          ) : (
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={(e) => { e.preventDefault(); onFriendAction(notification, 'accepted'); }}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
-              >
-                Accept
-              </button>
-              <button
-                onClick={(e) => { e.preventDefault(); onFriendAction(notification, 'declined'); }}
-                className="text-gray-400 hover:text-red-400 border border-gray-700 px-3 py-1 rounded-lg text-xs transition-colors"
-              >
-                Decline
-              </button>
-            </div>
-          )
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={(e) => { e.preventDefault(); onFriendAction(notification, 'accepted'); }}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+            >
+              Accept
+            </button>
+            <button
+              onClick={(e) => { e.preventDefault(); onFriendAction(notification, 'declined'); }}
+              className="text-gray-400 hover:text-red-400 border border-gray-700 px-3 py-1 rounded-lg text-xs transition-colors"
+            >
+              Decline
+            </button>
+          </div>
         )}
       </div>
       {data.posterPath && (
@@ -162,7 +156,7 @@ function NotificationItem({ notification, profile, friendAction, onFriendAction 
           className="w-8 h-12 rounded object-cover shrink-0"
         />
       )}
-      <span className="text-lg shrink-0">{icon}</span>
+      {icon && <span className="text-lg shrink-0">{icon}</span>}
     </div>
   );
 
@@ -178,7 +172,6 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [profiles, setProfiles] = useState({});
   const [loading, setLoading] = useState(true);
-  const [friendActions, setFriendActions] = useState({});
 
   useEffect(() => {
     if (!user) return;
@@ -208,12 +201,13 @@ export default function Notifications() {
   }
 
   const handleFriendAction = async (notification, action) => {
-    setFriendActions((prev) => ({ ...prev, [notification.id]: action }));
     if (action === 'accepted') {
       await acceptFriendRequest(notification.fromUid, user.uid);
     } else {
       await removeFriend(notification.fromUid, user.uid);
+      await deleteNotification(notification.id);
     }
+    setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
   };
 
   if (loading) return <LoadingScreen />;
@@ -236,7 +230,6 @@ export default function Notifications() {
               key={n.id}
               notification={n}
               profile={profiles[n.fromUid]}
-              friendAction={friendActions[n.id]}
               onFriendAction={handleFriendAction}
             />
           ))}

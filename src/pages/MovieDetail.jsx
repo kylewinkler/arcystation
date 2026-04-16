@@ -217,6 +217,11 @@ export default function MovieDetail() {
     setRatingModal(false);
     loadUserData();
     showWatchedToast(!!rating);
+    notifyFriends(user.uid, 'watched_movie', {
+      movieTitle: movie?.title || null,
+      tmdbId: Number(tmdbId) || null,
+      posterPath: movie?.poster_path || movie?.posterPath || null,
+    });
   }
 
 

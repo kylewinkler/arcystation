@@ -383,6 +383,7 @@ export async function acceptFriendRequest(uid1, uid2) {
     const { requestedBy } = snap.data();
     const acceptedBy = uid1 === requestedBy ? uid2 : uid1;
     await createNotification('friend_accepted', acceptedBy, requestedBy, {});
+    await clearFriendRequestNotifications(requestedBy, acceptedBy);
   }
 }
 
@@ -642,5 +643,23 @@ export async function markAllNotificationsRead(uid) {
   if (snap.empty) return;
   const batch = writeBatch(db);
   snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+  await batch.commit();
+}
+
+export async function deleteNotification(notificationId) {
+  await deleteDoc(doc(db, 'notifications', notificationId));
+}
+
+export async function clearFriendRequestNotifications(fromUid, toUid) {
+  const q = query(
+    collection(db, 'notifications'),
+    where('type', '==', 'friend_request'),
+    where('fromUid', '==', fromUid),
+    where('toUid', '==', toUid)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return;
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => batch.delete(d.ref));
   await batch.commit();
 }

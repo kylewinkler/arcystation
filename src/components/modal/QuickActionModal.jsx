@@ -101,6 +101,11 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     setWatched((prev) => new Set(prev).add(movie.tmdbId));
     onClose();
     showWatchedToast(!!rating);
+    notifyFriends(user.uid, 'watched_movie', {
+      movieTitle: movie?.title || null,
+      tmdbId: movie?.tmdbId || movie?.id || null,
+      posterPath: movie?.poster_path || movie?.posterPath || null,
+    });
   }
 
   async function handleDelete() {

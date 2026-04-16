@@ -279,10 +279,10 @@ export default function ListDetail() {
 
     // Notify friends about watched movie (fire-and-forget)
     notifyFriends(user.uid, 'watched_movie', {
-      movieTitle: movie?.title,
-      tmdbId: movie?.tmdbId,
+      movieTitle: movie?.title || null,
+      tmdbId: movie?.tmdbId || null,
       posterPath: movie?.posterPath || null,
-      listTitle: list?.title,
+      listTitle: list?.title || null,
       listId: id,
     });
 
@@ -290,7 +290,7 @@ export default function ListDetail() {
     const watchedAfter = Object.keys(myWatched).length + 1;
     if (watchedAfter >= movies.length && movies.length > 0) {
       notifyFriends(user.uid, 'finished_list', {
-        listTitle: list?.title,
+        listTitle: list?.title || null,
         listId: id,
       });
     }
