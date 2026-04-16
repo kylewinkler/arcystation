@@ -116,16 +116,17 @@ export default function Home() {
     const allIncomplete = valid.filter(
       (item) => item.watchedCount > 0 && item.watchedCount < (item.list.movieCount || 0)
     );
-    // Sort by most recent watch activity
+    // Sort by most recent watch activity for continue watching
     allIncomplete.sort((a, b) => (b.lastActivityAt?.seconds || 0) - (a.lastActivityAt?.seconds || 0));
+    // Continue watching prefers pinned lists; tonight pick uses all
     const pinnedIncomplete = allIncomplete.filter((item) => pinnedSet.has(item.listId));
-    const incomplete = pinnedIncomplete.length > 0 ? pinnedIncomplete : allIncomplete;
+    const continuePool = pinnedIncomplete.length > 0 ? pinnedIncomplete : allIncomplete;
 
-    if (incomplete.length > 0) {
+    if (allIncomplete.length > 0) {
       const movieData = {};
       const watchedData = {};
       await Promise.all(
-        incomplete.map(async (item) => {
+        allIncomplete.map(async (item) => {
           const [movies, watched] = await Promise.all([
             getListMovies(item.listId),
             getWatchedMovies(user.uid, item.listId),
@@ -135,8 +136,8 @@ export default function Home() {
         })
       );
 
-      // "Continue" — random unwatched movie from the most recently watched-on incomplete list
-      const continueList = incomplete[0];
+      // "Continue" — random unwatched movie from the most recently watched-on list (prefer pinned)
+      const continueList = continuePool[0];
       const continueUnwatched = (movieData[continueList.listId] || [])
         .filter((m) => !watchedData[continueList.listId]?.[m.tmdbId])
         .filter(isReleased);
@@ -145,31 +146,26 @@ export default function Home() {
         setContinueItem({ movie: continueMovie, listTitle: continueList.list.title, listId: continueList.listId });
       }
 
-      // "Tonight" — random unwatched movie from a random incomplete list, different from continue
-      const tonightList = pickRandom(incomplete);
-      const tonightUnwatched = (movieData[tonightList.listId] || [])
-        .filter((m) => !watchedData[tonightList.listId]?.[m.tmdbId])
-        .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
-        .filter(isReleased);
-      let tonightMovie = pickRandom(tonightUnwatched);
-      if (!tonightMovie) {
-        for (const item of incomplete) {
-          const candidates = (movieData[item.listId] || [])
-            .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
-            .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
-            .filter(isReleased);
+      // "Tonight" — pick a random list first, then a random unwatched movie from it
+      const shuffledLists = [...allIncomplete].sort(() => Math.random() - 0.5);
+      let tonightMovie = null;
+      let tonightList = null;
+      for (const item of shuffledLists) {
+        const candidates = (movieData[item.listId] || [])
+          .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
+          .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
+          .filter(isReleased);
+        if (candidates.length > 0) {
           tonightMovie = pickRandom(candidates);
-          if (tonightMovie) break;
+          tonightList = item;
+          break;
         }
       }
-      if (tonightMovie) {
-        const tonightLists = incomplete.filter((item) =>
-          (movieData[item.listId] || []).some((m) => m.tmdbId === tonightMovie.tmdbId)
-        );
+      if (tonightMovie && tonightList) {
         setTonightPick({
           movie: tonightMovie,
-          listTitle: tonightLists[0]?.list?.title || '',
-          listId: tonightLists[0]?.listId || '',
+          listTitle: tonightList.list?.title || '',
+          listId: tonightList.listId || '',
         });
       }
     }
@@ -222,46 +218,19 @@ export default function Home() {
 
       {/* Continue where you left off */}
       {continueItem && (
-        <Link to={`/lists/${continueItem.listId}`} className="block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-purple-500/40 transition-colors">
-          <p className="text-xs text-purple-400 font-medium px-4 pt-3">
-            Continue watching <span className="text-white">{continueItem.listTitle}</span>
-          </p>
-          <div className="flex">
-            <Link to={`/movie/${continueItem.movie.tmdbId}`} className="shrink-0" onClick={(e) => e.stopPropagation()}>
-              {continueItem.movie.posterPath ? (
-                <img
-                  src={posterUrl(continueItem.movie.posterPath, 'w342')}
-                  alt={continueItem.movie.title}
-                  className="w-32 h-48 object-cover"
-                />
-              ) : (
-                <div className="w-32 h-48 bg-gray-800 flex items-center justify-center text-gray-500 text-sm">
-                  No poster
-                </div>
-              )}
-            </Link>
-            <div className="flex-1 p-4 flex flex-col justify-center min-w-0">
-              <Link to={`/movie/${continueItem.movie.tmdbId}`} className="hover:text-purple-400 transition-colors" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-lg font-bold text-white truncate">
-                  {continueItem.movie.title}
-                  {continueItem.movie.year && (
-                    <span className="text-gray-400 font-normal"> ({continueItem.movie.year})</span>
-                  )}
-                </h2>
-              </Link>
-              {continueItem.movie.overview && (
-                <p className="text-gray-500 text-xs mt-1 line-clamp-2">{continueItem.movie.overview}</p>
-              )}
-            </div>
-          </div>
-        </Link>
+        <SuggestionCard
+          movie={continueItem.movie}
+          label={<><span className="text-white">Continue watching</span> {continueItem.listTitle}</>}
+          labelColor="text-purple-400"
+          to={`/lists/${continueItem.listId}`}
+        />
       )}
 
       {/* Pick for tonight */}
       {tonightPick && tonightPick.movie.tmdbId !== continueItem?.movie.tmdbId && (
         <SuggestionCard
           movie={tonightPick.movie}
-          label="Pick for tonight"
+          label="Random pick for tonight"
           sublabel={`from ${tonightPick.listTitle}`}
         />
       )}
