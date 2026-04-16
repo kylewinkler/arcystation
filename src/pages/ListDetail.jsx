@@ -7,7 +7,7 @@ import {
   getUserProfile, getAllWatchedTmdbIds, getAllWatchedMovies, getWatchedInfo,
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
   copyList, getFriends, sendListInvite, getPendingInvitesForList,
-  notifyFriends, createNotification,
+  notifyFriends, createNotification, bulkMarkWatchedFromReviews,
 } from '../lib/firestore';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
@@ -57,13 +57,14 @@ export default function ListDetail() {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showBulkWatchModal, setShowBulkWatchModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteFriends, setInviteFriends] = useState([]);
   const [pendingInviteUids, setPendingInviteUids] = useState(new Set());
   const [invitingUid, setInvitingUid] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hideWatched, setHideWatched] = useState(false);
+  const [watchFilter, setWatchFilter] = useState('all');
   const [selectedGenre, setSelectedGenre] = useState('');
   const [visibleCount, setVisibleCount] = useState(20);
   const [genres, setGenres] = useState({});
@@ -219,6 +220,17 @@ export default function ListDetail() {
     }
   };
 
+  const handleBulkMarkWatched = async () => {
+    const previouslyWatched = movies
+      .filter((m) => allMyWatched.has(m.tmdbId) && !myWatched[m.tmdbId])
+      .map((m) => m.tmdbId);
+    if (previouslyWatched.length > 0) {
+      await bulkMarkWatchedFromReviews(user.uid, id, previouslyWatched);
+    }
+    setShowBulkWatchModal(false);
+    showToast({ message: `Marked ${previouslyWatched.length} movies as watched` });
+  };
+
   const handleOpenInviteModal = async () => {
     setShowMenu(false);
     setShowInviteModal(true);
@@ -361,7 +373,8 @@ export default function ListDetail() {
   // Filter
   const filteredMovies = sortedMovies.filter((movie) => {
     if (searchQuery && !movie.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (hideWatched && displayWatched[movie.tmdbId]) return false;
+    if (watchFilter === 'unwatched' && displayWatched[movie.tmdbId]) return false;
+    if (watchFilter === 'watched' && !displayWatched[movie.tmdbId]) return false;
     if (selectedGenre && !(movie.genreIds || []).includes(Number(selectedGenre))) return false;
     return true;
   });
@@ -378,7 +391,7 @@ export default function ListDetail() {
   // Paginate
   const visibleMovies = filteredMovies.slice(0, visibleCount);
   const hasMore = visibleCount < filteredMovies.length;
-  const isFiltered = searchQuery || hideWatched || selectedGenre;
+  const isFiltered = searchQuery || watchFilter !== 'all' || selectedGenre;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -454,6 +467,14 @@ export default function ListDetail() {
                     className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
                   >
                     Invite Friend
+                  </button>
+                )}
+                {myProgress && movies.some((m) => allMyWatched.has(m.tmdbId) && !myWatched[m.tmdbId]) && (
+                  <button
+                    onClick={() => { setShowMenu(false); setShowBulkWatchModal(true); }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                  >
+                    Sync watched movies
                   </button>
                 )}
                 {!isOwner && !myProgress && (
@@ -552,31 +573,19 @@ export default function ListDetail() {
       {/* Filters */}
       {movies.length > 0 && (
         <div className="space-y-3">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(20); }}
-            placeholder="Search movies..."
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
-          />
-          <div className="flex items-center gap-3">
-            {myProgress && (
-              <button
-                onClick={() => { setHideWatched((v) => !v); setVisibleCount(20); }}
-                className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                  hideWatched
-                    ? 'bg-purple-600/20 border-purple-500/50 text-purple-300'
-                    : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-600'
-                }`}
-              >
-                {hideWatched ? 'Showing unwatched' : 'Hide watched'}
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(20); }}
+              placeholder="Search movies..."
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
+            />
             {sortedGenreEntries.length > 0 && (
               <select
                 value={selectedGenre}
                 onChange={(e) => { setSelectedGenre(e.target.value); setVisibleCount(20); }}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500"
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
               >
                 <option value="">All genres</option>
                 {sortedGenreEntries.map(([gid, name]) => (
@@ -585,6 +594,23 @@ export default function ListDetail() {
               </select>
             )}
           </div>
+          {myProgress && (
+            <div className="flex rounded-lg border border-gray-700 overflow-hidden">
+              {['all', 'unwatched', 'watched'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => { setWatchFilter(tab); setVisibleCount(20); }}
+                  className={`flex-1 text-sm py-1.5 transition-colors ${
+                    watchFilter === tab
+                      ? 'bg-purple-600/20 text-purple-300'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
           {isFiltered && (
             <p className="text-sm text-gray-500">
               {filteredMovies.length} of {movies.length} movies
@@ -681,6 +707,16 @@ export default function ListDetail() {
           confirmStyle="bg-red-600 hover:bg-red-700"
           onConfirm={handleConfirmUnmark}
           onCancel={() => setUnmarkModal(null)}
+        />
+      )}
+
+      {showBulkWatchModal && (
+        <ConfirmModal
+          title="Sync watched movies?"
+          message={`Mark ${movies.filter((m) => allMyWatched.has(m.tmdbId) && !myWatched[m.tmdbId]).length} previously watched movies as watched on this list. Your existing ratings and reviews will be kept.`}
+          confirmLabel="Sync"
+          onConfirm={handleBulkMarkWatched}
+          onCancel={() => setShowBulkWatchModal(false)}
         />
       )}
 

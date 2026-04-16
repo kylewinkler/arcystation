@@ -275,6 +275,23 @@ export async function markWatched(uid, listId, tmdbId, { rating, note, movieData
   await markWatchedStandalone(uid, tmdbId, { rating, note, movieData });
 }
 
+export async function bulkMarkWatchedFromReviews(uid, listId, tmdbIds) {
+  const batch = writeBatch(db);
+  for (const tmdbId of tmdbIds) {
+    const docId = watchedDocId(uid, listId, tmdbId);
+    batch.set(doc(db, 'listWatched', docId), {
+      uid,
+      listId,
+      tmdbId,
+      watchedAt: serverTimestamp(),
+    });
+  }
+  await batch.commit();
+  await updateDoc(doc(db, 'listMembers', memberDocId(uid, listId)), {
+    lastActivityAt: serverTimestamp(),
+  });
+}
+
 export async function unmarkWatched(uid, listId, tmdbId) {
   const docId = watchedDocId(uid, listId, tmdbId);
   await deleteDoc(doc(db, 'listWatched', docId));
