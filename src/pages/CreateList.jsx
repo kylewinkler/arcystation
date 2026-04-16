@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createList, addMovieToList, notifyFriends } from '../lib/firestore';
+import { createList, addMovieToList, startList, notifyFriends } from '../lib/firestore';
 import MovieSearch from '../components/movies/MovieSearch';
 import { posterUrl } from '../lib/tmdb';
 
@@ -51,6 +51,7 @@ export default function CreateList() {
         description: description.trim(),
         createdBy: user.uid,
       });
+      await startList(user.uid, listId);
       for (const movie of movies) {
         await addMovieToList(listId, movie);
       }

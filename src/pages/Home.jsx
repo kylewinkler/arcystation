@@ -197,7 +197,7 @@ export default function Home() {
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium">
-                  {invite.fromProfile?.displayName} invited you to join
+                  {invite.fromProfile?.displayName} {invite.list.isPrebuilt ? 'wants you to join the collection' : 'invited you to their list'}
                 </p>
                 <p className="text-purple-400 text-sm font-medium truncate">{invite.list.title}</p>
               </div>
@@ -300,6 +300,7 @@ export default function Home() {
                     total={item.list.movieCount || 0}
                     watched={item.watchedCount}
                     isOwner={item.list.createdBy === user.uid}
+                    isPrebuilt={item.list.isPrebuilt || false}
                     creatorName={item.creator?.displayName}
                     pinned={pinnedIds.has(item.listId)}
                     onTogglePin={handleTogglePin}

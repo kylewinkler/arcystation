@@ -93,10 +93,10 @@ export default function UserProfile() {
           const listDoc = await getList(p.listId);
           if (!listDoc) return null;
           let creator = null;
-          if (listDoc.createdBy && listDoc.createdBy !== uid) {
+          if (listDoc.createdBy && listDoc.createdBy !== user?.uid) {
             creator = await getUserProfile(listDoc.createdBy);
           }
-          return { ...p, list: listDoc, creator, isListOwner: listDoc.createdBy === uid };
+          return { ...p, list: listDoc, creator, isProfileOwnersList: listDoc.createdBy === uid, isViewerOwned: listDoc.createdBy === user?.uid };
         } catch { return null; }
       })
     );
@@ -117,9 +117,9 @@ export default function UserProfile() {
 
   const canSeeContent = isOwner || isFriend;
 
-  // Split lists into owned vs joined
-  const ownedLists = lists.filter((item) => item.isListOwner);
-  const joinedLists = lists.filter((item) => !item.isListOwner);
+  // Split lists into owned vs joined (from profile owner's perspective)
+  const ownedLists = lists.filter((item) => item.isProfileOwnersList);
+  const joinedLists = lists.filter((item) => !item.isProfileOwnersList);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -223,7 +223,8 @@ export default function UserProfile() {
                     title={item.list.title}
                     total={item.list.movieCount || 0}
                     watched={item.watchedCount}
-                    isOwner={item.isListOwner}
+                    isOwner={item.isViewerOwned}
+                    isPrebuilt={item.list.isPrebuilt || false}
                     creatorName={item.creator?.displayName}
                     pinned={pinnedIds.has(item.listId)}
                     onTogglePin={isOwner ? handleTogglePin : undefined}
@@ -247,7 +248,8 @@ export default function UserProfile() {
                     title={item.list.title}
                     total={item.list.movieCount || 0}
                     watched={item.watchedCount}
-                    isOwner={item.isListOwner}
+                    isOwner={item.isViewerOwned}
+                    isPrebuilt={item.list.isPrebuilt || false}
                     creatorName={item.creator?.displayName}
                     pinned={pinnedIds.has(item.listId)}
                     onTogglePin={isOwner ? handleTogglePin : undefined}

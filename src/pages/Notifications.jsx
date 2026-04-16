@@ -77,7 +77,18 @@ function NotificationItem({ notification, profile, onFriendAction }) {
       text = (
         <>
           <span className="text-white font-medium">{profile?.displayName}</span>
-          {' invited you to '}
+          {' invited you to their list '}
+          <span className="text-white font-medium">{data.listTitle}</span>
+        </>
+      );
+      link = data.listId ? `/lists/${data.listId}` : null;
+      break;
+    case 'collection_invite':
+      icon = '🎬';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' wants you to join the collection '}
           <span className="text-white font-medium">{data.listTitle}</span>
         </>
       );

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { posterUrl } from '../../lib/tmdb';
 import ProgressBar from './ProgressBar';
+import ArcyPop from '../../assets/images/arcy-poses/arcy-float.png';
 
 export default function ListCard({
   listId,
@@ -35,9 +36,7 @@ export default function ListCard({
         <div className="flex items-start justify-between gap-2 mb-1">
           <h3 className="text-white font-medium line-clamp-2">{title}</h3>
           <div className="flex items-center gap-2 shrink-0">
-            {isPrebuilt && (
-              <span className="text-xs text-teal-400">collection</span>
-            )}
+            {isPrebuilt && <img src={ArcyPop} alt="" className="w-4 h-4" />}
             {!isPrebuilt && isOwner && <span className="text-xs text-purple-400">yours</span>}
             {!isPrebuilt && !isOwner && creatorName && (
               <span className="text-xs text-gray-500">by {creatorName}</span>

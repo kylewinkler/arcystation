@@ -23,6 +23,7 @@ import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import ConfirmModal from '../components/modal/ConfirmModal';
 import { LIST_NOT_FOUND } from '../lib/copy/empty';
+import { ADMIN_UIDS } from '../lib/admin';
 import RatingModal from '../components/modal/RatingModal';
 
 export default function ListDetail() {
@@ -236,7 +237,8 @@ export default function ListDetail() {
   const handleSendInvite = async (friendUid) => {
     setInvitingUid(friendUid);
     await sendListInvite(user.uid, friendUid, id, list.title);
-    await createNotification('list_invite', user.uid, friendUid, { listTitle: list.title, listId: id });
+    const notifType = isPrebuilt ? 'collection_invite' : 'list_invite';
+    await createNotification(notifType, user.uid, friendUid, { listTitle: list.title, listId: id });
     setPendingInviteUids((prev) => new Set([...prev, friendUid]));
     setInviteFriends((prev) => prev.filter((f) => f.uid !== friendUid));
     setInvitingUid(null);
@@ -446,6 +448,14 @@ export default function ListDetail() {
                     </button>
                   </>
                 )}
+                {isPrebuilt && myProgress && (
+                  <button
+                    onClick={handleOpenInviteModal}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                  >
+                    Invite Friend
+                  </button>
+                )}
                 {!isOwner && !myProgress && (
                   <button
                     onClick={() => { setShowMenu(false); handleStartList(); }}
@@ -597,7 +607,7 @@ export default function ListDetail() {
               readonly={!canCheckMovies}
               seenElsewhere={allMyWatched.has(movie.tmdbId)}
               isFeatured={list.featuredMovie?.tmdbId === movie.tmdbId}
-              onToggleFeatured={isOwner && !isPrebuilt ? async (m) => {
+              onToggleFeatured={(isOwner || (isPrebuilt && ADMIN_UIDS.includes(user?.uid))) ? async (m) => {
                 await setFeaturedMovie(id, list.featuredMovie?.tmdbId === m.tmdbId ? null : m);
               } : undefined}
             />
