@@ -148,6 +148,7 @@ export async function addMovieToList(listId, movie) {
     title: movie.title,
     posterPath: movie.posterPath,
     year: movie.year,
+    releaseDate: movie.releaseDate || movie.release_date || null,
     overview: movie.overview,
     order: movie.order || 0,
     ...(movie.genreIds?.length > 0 && { genreIds: movie.genreIds }),

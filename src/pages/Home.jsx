@@ -22,7 +22,9 @@ function pickRandom(arr) {
 
 const currentYear = new Date().getFullYear();
 function isReleased(m) {
-  return !m.year || Number(m.year) <= currentYear;
+  if (m.releaseDate) return new Date(m.releaseDate) <= new Date();
+  if (m.release_date) return new Date(m.release_date) <= new Date();
+  return !m.year || Number(m.year) < currentYear;
 }
 
 const PAGE_SIZE = 10;
@@ -110,10 +112,12 @@ export default function Home() {
     const valid = enriched.filter(Boolean);
     setLists(sortLists(valid, pinnedSet));
 
-    // Find incomplete lists for suggestions — prefer pinned
+    // Find incomplete lists for suggestions — only those with at least one watch
     const allIncomplete = valid.filter(
-      (item) => item.watchedCount < (item.list.movieCount || 0)
+      (item) => item.watchedCount > 0 && item.watchedCount < (item.list.movieCount || 0)
     );
+    // Sort by most recent watch activity
+    allIncomplete.sort((a, b) => (b.lastActivityAt?.seconds || 0) - (a.lastActivityAt?.seconds || 0));
     const pinnedIncomplete = allIncomplete.filter((item) => pinnedSet.has(item.listId));
     const incomplete = pinnedIncomplete.length > 0 ? pinnedIncomplete : allIncomplete;
 
@@ -131,18 +135,14 @@ export default function Home() {
         })
       );
 
-      // "Continue" — random unwatched movie from the most recently active incomplete list
+      // "Continue" — random unwatched movie from the most recently watched-on incomplete list
       const continueList = incomplete[0];
       const continueUnwatched = (movieData[continueList.listId] || [])
         .filter((m) => !watchedData[continueList.listId]?.[m.tmdbId])
         .filter(isReleased);
       const continueMovie = pickRandom(continueUnwatched);
       if (continueMovie) {
-        const appearsOn = incomplete.filter((item) =>
-          (movieData[item.listId] || []).some((m) => m.tmdbId === continueMovie.tmdbId)
-        ).map((item) => ({ list: item.list, progress: item }));
-
-        setContinueItem({ movie: continueMovie, lists: appearsOn });
+        setContinueItem({ movie: continueMovie, listTitle: continueList.list.title, listId: continueList.listId });
       }
 
       // "Tonight" — random unwatched movie from a random incomplete list, different from continue
@@ -222,9 +222,12 @@ export default function Home() {
 
       {/* Continue where you left off */}
       {continueItem && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <Link to={`/lists/${continueItem.listId}`} className="block bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-purple-500/40 transition-colors">
+          <p className="text-xs text-purple-400 font-medium px-4 pt-3">
+            Continue watching <span className="text-white">{continueItem.listTitle}</span>
+          </p>
           <div className="flex">
-            <Link to={`/movie/${continueItem.movie.tmdbId}`} className="shrink-0">
+            <Link to={`/movie/${continueItem.movie.tmdbId}`} className="shrink-0" onClick={(e) => e.stopPropagation()}>
               {continueItem.movie.posterPath ? (
                 <img
                   src={posterUrl(continueItem.movie.posterPath, 'w342')}
@@ -237,35 +240,21 @@ export default function Home() {
                 </div>
               )}
             </Link>
-            <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
-              <div>
-                <p className="text-xs text-purple-400 font-medium mb-1">Continue watching</p>
-                <Link to={`/movie/${continueItem.movie.tmdbId}`} className="hover:text-purple-400 transition-colors">
-                  <h2 className="text-lg font-bold text-white truncate">
-                    {continueItem.movie.title}
-                    {continueItem.movie.year && (
-                      <span className="text-gray-400 font-normal"> ({continueItem.movie.year})</span>
-                    )}
-                  </h2>
-                </Link>
-                {continueItem.movie.overview && (
-                  <p className="text-gray-500 text-xs mt-1 line-clamp-2">{continueItem.movie.overview}</p>
-                )}
-              </div>
-              <p className="mt-3 text-xs text-gray-500">
-                from{' '}
-                {continueItem.lists.map(({ list, progress }, i) => (
-                  <span key={list.id}>
-                    {i > 0 && ', '}
-                    <Link to={`/lists/${list.id}`} className="text-gray-400 hover:text-purple-400 transition-colors">
-                      {list.title} ({progress.watchedCount}/{list.movieCount || 0})
-                    </Link>
-                  </span>
-                ))}
-              </p>
+            <div className="flex-1 p-4 flex flex-col justify-center min-w-0">
+              <Link to={`/movie/${continueItem.movie.tmdbId}`} className="hover:text-purple-400 transition-colors" onClick={(e) => e.stopPropagation()}>
+                <h2 className="text-lg font-bold text-white truncate">
+                  {continueItem.movie.title}
+                  {continueItem.movie.year && (
+                    <span className="text-gray-400 font-normal"> ({continueItem.movie.year})</span>
+                  )}
+                </h2>
+              </Link>
+              {continueItem.movie.overview && (
+                <p className="text-gray-500 text-xs mt-1 line-clamp-2">{continueItem.movie.overview}</p>
+              )}
             </div>
           </div>
-        </div>
+        </Link>
       )}
 
       {/* Pick for tonight */}

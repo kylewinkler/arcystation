@@ -15,6 +15,7 @@ export async function searchMovies(query, { year } = {}) {
     tmdbId: String(m.id),
     title: m.title,
     year: m.release_date ? m.release_date.slice(0, 4) : '',
+    releaseDate: m.release_date || '',
     posterPath: m.poster_path,
     overview: m.overview,
     genreIds: m.genre_ids || [],
@@ -36,6 +37,7 @@ function mapMovieResults(results) {
     tmdbId: String(m.id),
     title: m.title,
     year: m.release_date ? m.release_date.slice(0, 4) : '',
+    releaseDate: m.release_date || '',
     posterPath: m.poster_path,
     overview: m.overview,
     genreIds: m.genre_ids || [],
@@ -78,6 +80,7 @@ export async function getMovieDetails(tmdbId) {
     tmdbId: String(m.id),
     title: m.title,
     year: m.release_date ? m.release_date.slice(0, 4) : '',
+    releaseDate: m.release_date || '',
     posterPath: m.poster_path,
     overview: m.overview,
   };
