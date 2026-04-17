@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getUserProfile, getUserAllProgress, getFriendship,
@@ -19,7 +19,8 @@ import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 
 export default function UserProfile() {
   const { uid } = useParams();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const [profile, setProfile] = useState(null);
   const [allWatchedMovies, setAllWatchedMovies] = useState([]);
@@ -261,6 +262,15 @@ export default function UserProfile() {
             </div>
           )}
         </div>
+      )}
+
+      {isOwner && (
+        <button
+          onClick={async () => { await logout(); navigate('/login'); }}
+          className="w-full text-sm text-gray-500 hover:text-red-400 border border-gray-700 px-3 py-2 rounded-lg transition-colors"
+        >
+          Sign out
+        </button>
       )}
     </div>
   );

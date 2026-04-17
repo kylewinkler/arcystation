@@ -88,36 +88,38 @@ export default function WatchedByYear() {
       <p className="text-sm text-gray-500">{yearFiltered.length} movies watched</p>
 
       {/* Filters */}
-      <div className="flex gap-3">
+      <div className="space-y-2 sm:space-y-0 sm:flex sm:gap-2">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by title..."
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500"
+          className="w-full sm:flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500"
         />
-        <select
-          value={selectedYear}
-          onChange={(e) => handleYearChange(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
-        >
-          <option value="all">All years</option>
-          {years.map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
-        {sortedGenres.length > 0 && (
+        <div className="flex gap-2">
           <select
-            value={selectedGenre}
-            onChange={(e) => setSelectedGenre(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+            value={selectedYear}
+            onChange={(e) => handleYearChange(e.target.value)}
+            className="flex-1 sm:flex-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
           >
-            <option value="">All genres</option>
-            {sortedGenres.map(([gid, name]) => (
-              <option key={gid} value={gid}>{name}</option>
+            <option value="all">All years</option>
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
             ))}
           </select>
-        )}
+          {sortedGenres.length > 0 && (
+            <select
+              value={selectedGenre}
+              onChange={(e) => setSelectedGenre(e.target.value)}
+              className="flex-1 sm:flex-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+            >
+              <option value="">All genres</option>
+              {sortedGenres.map(([gid, name]) => (
+                <option key={gid} value={gid}>{name}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Results count */}
