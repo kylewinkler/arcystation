@@ -363,7 +363,7 @@ export async function getAllWatchedTmdbIds(uid) {
 }
 
 export async function getAllWatchedMovies(uid) {
-  const q = query(collection(db, 'reviews'), where('uid', '==', uid));
+  const q = query(collection(db, 'reviews'), where('uid', '==', uid), orderBy('watchedAt', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }

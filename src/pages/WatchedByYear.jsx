@@ -20,6 +20,7 @@ export default function WatchedByYear() {
   const [selectedYear, setSelectedYear] = useState(urlYear || 'all');
   const [search, setSearch] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('');
+  const [sortBy, setSortBy] = useState('recent');
   const [loading, setLoading] = useState(true);
   const [myWatchedIds, setMyWatchedIds] = useState(new Set());
 
@@ -62,12 +63,18 @@ export default function WatchedByYear() {
   });
   const sortedGenres = Object.entries(availableGenres).sort((a, b) => a[1].localeCompare(b[1]));
 
-  // Apply search + genre filters
-  const filtered = yearFiltered.filter((m) => {
-    if (search && !m.title.toLowerCase().includes(search.toLowerCase())) return false;
-    if (selectedGenre && !(m.genreIds || []).includes(Number(selectedGenre))) return false;
-    return true;
-  });
+  // Apply search + genre filters + sort
+  const filtered = yearFiltered
+    .filter((m) => {
+      if (search && !m.title.toLowerCase().includes(search.toLowerCase())) return false;
+      if (selectedGenre && !(m.genreIds || []).includes(Number(selectedGenre))) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'rating_desc') return (b.rating || 0) - (a.rating || 0);
+      if (sortBy === 'rating_asc') return (a.rating || 0) - (b.rating || 0);
+      return 0;
+    });
 
   const handleYearChange = (val) => {
     setSelectedYear(val);
@@ -96,11 +103,11 @@ export default function WatchedByYear() {
           placeholder="Search by title..."
           className="w-full sm:flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500"
         />
-        <div className="flex gap-2">
+        <div className={`grid gap-2 sm:flex ${sortedGenres.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <select
             value={selectedYear}
             onChange={(e) => handleYearChange(e.target.value)}
-            className="flex-1 sm:flex-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+            className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
           >
             <option value="all">All years</option>
             {years.map((y) => (
@@ -111,7 +118,7 @@ export default function WatchedByYear() {
             <select
               value={selectedGenre}
               onChange={(e) => setSelectedGenre(e.target.value)}
-              className="flex-1 sm:flex-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+              className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
             >
               <option value="">All genres</option>
               {sortedGenres.map(([gid, name]) => (
@@ -119,6 +126,15 @@ export default function WatchedByYear() {
               ))}
             </select>
           )}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+          >
+            <option value="recent">Recent</option>
+            <option value="rating_desc">Top rated</option>
+            <option value="rating_asc">Lowest rated</option>
+          </select>
         </div>
       </div>
 

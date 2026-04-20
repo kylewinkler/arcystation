@@ -56,20 +56,16 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
           </Link>
         </p>
         {isWatched && (
-          <span className="inline-flex items-center gap-1 text-xs text-purple-400 mt-0.5">
-            Watched
-          </span>
+          <div className="inline-flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-purple-400">Watched</span>
+            <StarRating value={watchedData?.rating || 0} size="sm" />
+          </div>
         )}
         {seenElsewhere && !isWatched && (
           <p className="text-watched text-xs mt-0.5">You've seen this</p>
         )}
         {movie.overview && !isWatched && (
           <p className="text-gray-600 text-xs mt-1 line-clamp-2">{movie.overview}</p>
-        )}
-        {watchedData?.rating > 0 && (
-          <div className="mt-1">
-            <StarRating value={watchedData.rating} size="sm" />
-          </div>
         )}
         {watchedData?.note && (
           <p className="text-gray-400 text-xs mt-1 italic">"{watchedData.note}"</p>

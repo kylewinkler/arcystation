@@ -172,7 +172,7 @@ export default function UserProfile() {
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-lg font-bold text-white">Recently Watched</h2>
               <span className="text-sm text-gray-500">({allWatchedMovies.length})</span>
-              {allWatchedMovies.length > 6 && (
+              {allWatchedMovies.length > 0 && (
                 <Link
                   to={`/watched/${uid}`}
                   className="text-xs text-purple-400 hover:text-purple-300 ml-auto"
@@ -182,8 +182,8 @@ export default function UserProfile() {
               )}
             </div>
             {allWatchedMovies.length > 0 ? (
-              <div className="grid grid-cols-6 gap-2">
-                {allWatchedMovies.slice(0, 6).map((m) => (
+              <div className="grid grid-cols-5 gap-2">
+                {allWatchedMovies.slice(0, 5).map((m) => (
                   <WatchedPoster
                     key={m.tmdbId}
                     tmdbId={m.tmdbId}

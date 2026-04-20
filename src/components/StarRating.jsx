@@ -38,11 +38,11 @@ export default function StarRating({ value = 0, onChange, size = 'md' }) {
       <span className="text-yellow-400">★</span>
     ) : halfFilled ? (
       <span className="relative inline-block">
-        <span className="text-gray-600">★</span>
+        <span className="text-yellow-900">★</span>
         <span className="absolute inset-0 text-yellow-400 overflow-hidden" style={{ width: '50%' }}>★</span>
       </span>
     ) : (
-      <span className="text-gray-600 transition-colors">★</span>
+      <span className="text-yellow-900 transition-colors">★</span>
     );
 
     if (!interactive) {

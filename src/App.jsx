@@ -10,7 +10,6 @@ import ListDetail from './pages/ListDetail';
 import EditList from './pages/EditList';
 import ProgressRedirect from './pages/ProgressRedirect';
 import UserProfile from './pages/UserProfile';
-import Friends from './pages/Friends';
 import PublicShare from './pages/PublicShare';
 import Admin from './pages/Admin';
 import Movies from './pages/Movies';
@@ -44,7 +43,6 @@ export default function App() {
                     <Route path="/progress/:uid/:listId" element={<ProgressRedirect />} />
                     <Route path="/user/:uid" element={<UserProfile />} />
                     <Route path="/notifications" element={<Notifications />} />
-                    <Route path="/friends" element={<Friends />} />
                     <Route path="/movies" element={<Movies />} />
                     <Route path="/movie/:tmdbId" element={<MovieDetail />} />
                     <Route path="/watched/:uid/:year?" element={<WatchedByYear />} />

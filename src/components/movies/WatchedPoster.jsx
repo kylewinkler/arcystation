@@ -20,7 +20,7 @@ export default function WatchedPoster({ tmdbId, title, posterPath, rating, glow 
       )}
       <p className="text-xs text-gray-400 mt-1 truncate">{title}</p>
       {rating > 0 && (
-        <div className="mt-0.5">
+        <div className="mt-0.5 overflow-hidden">
           <StarRating value={rating} size="sm" />
         </div>
       )}

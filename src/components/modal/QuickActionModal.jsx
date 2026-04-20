@@ -269,9 +269,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
               </svg>
             </div>
             <span className="text-purple-300 text-sm font-medium">Watched</span>
-            {watchedData.rating > 0 && (
-              <span className="ml-auto"><StarRating value={watchedData.rating} size="sm" /></span>
-            )}
+            <span className="ml-auto"><StarRating value={watchedData.rating || 0} size="sm" /></span>
           </div>
           {watchedData.note && (
             <p className="text-gray-300 text-sm mt-2 italic truncate">"{watchedData.note}"</p>

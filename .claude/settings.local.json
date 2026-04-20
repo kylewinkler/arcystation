@@ -22,7 +22,12 @@
       "Bash(node -e \"const {NFR_MOVIES} = require\\('./src/lib/seed-data/nfr.js'\\); console.log\\('Total entries:', NFR_MOVIES.length\\);\")",
       "Bash(node -e \"const {NFR_MOVIES} = require\\('./src/lib/seed-data/nfr.js'\\); console.log\\('Current count:', NFR_MOVIES.length\\);\")",
       "Bash(python3 -c ':*)",
-      "Bash(grep -E \"\\\\.\\(jsx|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(jsx|js\\)$\")",
+      "Bash(grep -r \"--color-watched-glow\" \"C:\\\\Users\\\\winks\\\\approot\\\\movies\\\\src\" --include=\"*.css\" --include=\"*.jsx\" --include=\"*.js\" --include=\"*.tsx\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

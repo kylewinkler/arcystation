@@ -585,7 +585,7 @@ export default function ListDetail() {
               <select
                 value={selectedGenre}
                 onChange={(e) => { setSelectedGenre(e.target.value); setVisibleCount(20); }}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                className="shrink-0 max-w-[8rem] bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
               >
                 <option value="">All genres</option>
                 {sortedGenreEntries.map(([gid, name]) => (
