@@ -26,7 +26,9 @@ export default function Admin() {
 
   async function loadUsers() {
     const snap = await getDocs(collection(db, 'users'));
-    setUsers(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
+    const userList = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    userList.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    setUsers(userList);
     setLoading(false);
   }
 
@@ -195,6 +197,48 @@ export default function Admin() {
     setSeedingNFR(false);
   }
 
+  const [fixingRatings, setFixingRatings] = useState(false);
+  const [fixRatingsResult, setFixRatingsResult] = useState(null);
+
+  async function fixMissingRatings() {
+    setFixingRatings(true);
+    setFixRatingsResult(null);
+    let fixed = 0;
+    let scanned = 0;
+    try {
+      // 1. Scan listWatched for any docs that have a rating field (old schema)
+      const lwSnap = await getDocs(collection(db, 'listWatched'));
+      for (const lwDoc of lwSnap.docs) {
+        const d = lwDoc.data();
+        scanned++;
+        if (d.rating == null) continue;
+        const reviewId = `${d.uid}__${d.tmdbId}`;
+        const reviewRef = doc(db, 'reviews', reviewId);
+        await setDoc(reviewRef, { rating: d.rating }, { merge: true });
+        fixed++;
+      }
+
+      // 2. Re-run userWatched → reviews pass (idempotent, catches anything missed)
+      const uwSnap = await getDocs(collection(db, 'userWatched'));
+      for (const uwDoc of uwSnap.docs) {
+        const uid = uwDoc.id;
+        const movies = uwDoc.data().movies || {};
+        for (const [tmdbId, meta] of Object.entries(movies)) {
+          if (meta.rating == null) continue;
+          const reviewId = `${uid}__${tmdbId}`;
+          await setDoc(doc(db, 'reviews', reviewId), { uid, tmdbId, rating: meta.rating }, { merge: true });
+          fixed++;
+        }
+      }
+
+      setFixRatingsResult(`Scanned ${scanned} listWatched docs. Patched ${fixed} reviews with missing ratings.`);
+    } catch (err) {
+      console.error('Fix ratings failed:', err);
+      setFixRatingsResult(`Error: ${err.message}`);
+    }
+    setFixingRatings(false);
+  }
+
   async function migrateToNewSchema() {
     setMigrating(true);
     setMigrateResult(null);
@@ -290,23 +334,44 @@ export default function Admin() {
       </div>
 
       {/* Data migration */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <h2 className="text-sm font-medium text-white mb-2">Data Migration</h2>
-        <p className="text-xs text-gray-500 mb-3">
-          Migrate old schema (userProgress + userWatched) → new schema (listMembers + listWatched + reviews). Safe to run multiple times.
-        </p>
-        <button
-          onClick={migrateToNewSchema}
-          disabled={migrating}
-          className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          {migrating ? 'Migrating...' : 'Migrate to New Schema'}
-        </button>
-        {migrateResult && (
-          <p className={`text-sm mt-2 ${migrateResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
-            {migrateResult}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
+        <h2 className="text-sm font-medium text-white">Data Migration</h2>
+
+        <div>
+          <p className="text-xs text-gray-500 mb-2">
+            Fix missing ratings — scans listWatched and userWatched for ratings not present in reviews and patches them in. Safe to run multiple times.
           </p>
-        )}
+          <button
+            onClick={fixMissingRatings}
+            disabled={fixingRatings}
+            className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {fixingRatings ? 'Fixing...' : 'Fix Missing Ratings'}
+          </button>
+          {fixRatingsResult && (
+            <p className={`text-sm mt-2 ${fixRatingsResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+              {fixRatingsResult}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500 mb-2">
+            Migrate old schema (userProgress + userWatched) → new schema (listMembers + listWatched + reviews). Safe to run multiple times.
+          </p>
+          <button
+            onClick={migrateToNewSchema}
+            disabled={migrating}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {migrating ? 'Migrating...' : 'Migrate to New Schema'}
+          </button>
+          {migrateResult && (
+            <p className={`text-sm mt-2 ${migrateResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+              {migrateResult}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Pre-built lists */}
