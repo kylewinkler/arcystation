@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BaseModal from './Modal';
 import RatingModal from './RatingModal';
 import StarRating from '../StarRating';
@@ -15,6 +16,7 @@ import ArcyReadTransmission from '../../assets/images/arcy-poses/arcy-read-trans
 
 export default function QuickActionModal({ isOpen, onClose, movie, user, watched, setWatched }) {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [mode, setMode] = useState('menu'); // 'menu' | 'lists' | 'rating'
 
   // Watched info
@@ -118,7 +120,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     const ids = await getAllWatchedTmdbIds(user.uid);
     const milestone = getMilestone(ids.size);
     if (milestone) {
-      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyReadTransmission }, 5000);
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyReadTransmission });
     } else if (hasRating) {
       showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyReadTransmission });
     } else {
@@ -296,6 +298,17 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       >
         <span className="text-lg leading-none">+</span>
         Add to list
+      </button>
+
+      {/* View details */}
+      <button
+        onClick={() => { onClose(); navigate(`/movie/${movie.tmdbId}`); }}
+        className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-3 py-2.5 rounded-lg transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" />
+        </svg>
+        View details
       </button>
     </BaseModal>
   );

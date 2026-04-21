@@ -5,9 +5,11 @@ import {
   getUserAllProgress, getList, getUserProfile, getListMovies, getWatchedMovies,
   getPinnedLists, pinList, unpinList, sortLists,
   getPendingListInvites, acceptListInvite, declineListInvite,
+  getPrebuiltLists, getAllWatchedTmdbIds,
 } from '../lib/firestore';
-import { posterUrl } from '../lib/tmdb';
+import { discoverMovies, posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
+import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -39,6 +41,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pinnedIds, setPinnedIds] = useState(new Set());
+  const [popularMovies, setPopularMovies] = useState([]);
+  const [featuredLists, setFeaturedLists] = useState([]);
+  const [watchedIds, setWatchedIds] = useState(new Set());
+  const [quickActionMovie, setQuickActionMovie] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -111,6 +117,19 @@ export default function Home() {
 
     const valid = enriched.filter(Boolean);
     setLists(sortLists(valid, pinnedSet));
+
+    // For users with no lists, load discovery content
+    if (valid.length === 0) {
+      const [popResult, prebuilt, ids] = await Promise.all([
+        discoverMovies({ tab: 'popular' }),
+        getPrebuiltLists(),
+        getAllWatchedTmdbIds(user.uid),
+      ]);
+      setPopularMovies(popResult.movies.slice(0, 5));
+      const shuffled = [...prebuilt].sort(() => Math.random() - 0.5);
+      setFeaturedLists(shuffled.slice(0, 2));
+      setWatchedIds(ids);
+    }
 
     // Find incomplete lists for suggestions — only those with at least one watch
     const allIncomplete = valid.filter(
@@ -235,6 +254,63 @@ export default function Home() {
         />
       )}
 
+      {/* Discovery sections shown above list activity when user has no lists */}
+      {lists.length === 0 && (
+        <div className="space-y-8">
+          {/* Popular movies row */}
+          {popularMovies.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-white">Popular Right Now</h2>
+                <Link to="/movies" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {popularMovies.map((m) => (
+                  <button
+                    key={m.tmdbId}
+                    onClick={() => setQuickActionMovie(m)}
+                    className="group text-left"
+                  >
+                    {m.posterPath ? (
+                      <img
+                        src={posterUrl(m.posterPath, 'w185')}
+                        alt=""
+                        className="w-full aspect-[2/3] rounded-lg object-cover group-hover:ring-2 ring-purple-500 transition-all"
+                      />
+                    ) : (
+                      <div className="w-full aspect-[2/3] rounded-lg bg-gray-800" />
+                    )}
+                    <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{m.title}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Featured prebuilt collections */}
+          {featuredLists.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-white">Explore Collections</h2>
+                <Link to="/lists" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {featuredLists.map((l) => (
+                  <ListCard
+                    key={l.id}
+                    listId={l.id}
+                    title={l.title}
+                    total={l.movieCount || 0}
+                    isPrebuilt
+                    featuredPoster={l.featuredMovie?.posterPath || l.firstPoster}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Lists header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">List Activity</h1>
@@ -245,29 +321,39 @@ export default function Home() {
             + New List
           </Link>
       </div>
-      {
-        lists.length === 0 ? (
-          <NotFound title={HOME_NO_LISTS.title} subtitle={HOME_NO_LISTS.subtitle} scene={HOME_NO_LISTS.scene} />
-        ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-                {lists.map((item) => (
-                  <ListCard
-                    key={item.id}
-                    listId={item.listId}
-                    title={item.list.title}
-                    total={item.list.movieCount || 0}
-                    watched={item.watchedCount}
-                    isOwner={item.list.createdBy === user.uid}
-                    isPrebuilt={item.list.isPrebuilt || false}
-                    creatorName={item.creator?.displayName}
-                    pinned={pinnedIds.has(item.listId)}
-                    onTogglePin={handleTogglePin}
-                    featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
-                  />
-                ))}
-              </div>
-        )
-      }
+      {lists.length === 0 ? (
+        <NotFound
+          title={HOME_NO_LISTS.title}
+          subtitle={HOME_NO_LISTS.subtitle}
+          scene={HOME_NO_LISTS.scene}
+        />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {lists.map((item) => (
+            <ListCard
+              key={item.id}
+              listId={item.listId}
+              title={item.list.title}
+              total={item.list.movieCount || 0}
+              watched={item.watchedCount}
+              isOwner={item.list.createdBy === user.uid}
+              isPrebuilt={item.list.isPrebuilt || false}
+              creatorName={item.creator?.displayName}
+              pinned={pinnedIds.has(item.listId)}
+              onTogglePin={handleTogglePin}
+              featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
+            />
+          ))}
+        </div>
+      )}
+      <QuickActionModal
+        isOpen={!!quickActionMovie}
+        onClose={() => setQuickActionMovie(null)}
+        movie={quickActionMovie}
+        user={user}
+        watched={watchedIds}
+        setWatched={setWatchedIds}
+      />
     </div>
   );
 }

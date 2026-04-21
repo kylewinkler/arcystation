@@ -200,7 +200,7 @@ export default function MovieDetail() {
     const ids = await getAllWatchedTmdbIds(user.uid);
     const milestone = getMilestone(ids.size);
     if (milestone) {
-      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyReaddTransmission }, 5000);
+      showToast({ message: `${milestone.title} ${milestone.subtitle}`, image: ArcyReaddTransmission });
     } else if (hasRating) {
       showToast({ message: randomFrom(REVIEW_REACTIONS), image: ArcyReaddTransmission });
     } else {

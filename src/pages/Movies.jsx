@@ -441,10 +441,10 @@ function MovieGrid({ movies, watched, onQuickAction }) {
       {movies.map((m) => {
         const isSeen = watched.has(m.tmdbId);
         return (
-          <Link
+          <button
             key={m.tmdbId}
-            to={`/movie/${m.tmdbId}`}
-            className="group relative"
+            onClick={() => onQuickAction(m)}
+            className="group relative text-left"
           >
             {m.posterPath ? (
               <img
@@ -461,22 +461,13 @@ function MovieGrid({ movies, watched, onQuickAction }) {
                 No img
               </div>
             )}
-            {/* Quick action button */}
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onQuickAction(m); }}
-              className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-gray-900/80 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-purple-600 ${isSeen ? 'text-[var(--color-watched-glow)]' : 'text-white'}`}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
             <p className="text-xs text-gray-400 mt-1.5 truncate group-hover:text-white transition-colors">
               {m.title}
             </p>
             {m.year && (
               <p className="text-xs text-gray-600">{m.year}</p>
             )}
-          </Link>
+          </button>
         );
       })}
     </div>

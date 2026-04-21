@@ -52,6 +52,8 @@ select {
   --animate-float: float 3.2s ease-in-out infinite;
   --animate-fade-in-up: fade-in-up 0.4s ease-out;
   --animate-fade-out-down: fade-out-down 0.3s ease-in forwards;
+  --animate-fade-in-down: fade-in-down 0.35s ease-out;
+  --animate-fade-out-up: fade-out-up 0.3s ease-in forwards;
 
   @keyframes float {
     0%, 100% {
@@ -81,6 +83,28 @@ select {
     to {
       opacity: 0;
       transform: translateY(12px);
+    }
+  }
+
+  @keyframes fade-in-down {
+    from {
+      opacity: 0;
+      transform: translateY(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-out-up {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-12px);
     }
   }
 }

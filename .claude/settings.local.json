@@ -27,7 +27,8 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Read(//c/Users/winks/.claude/**)"
     ]
   }
 }
