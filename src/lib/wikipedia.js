@@ -16,10 +16,19 @@ function normTitle(s) {
 
 function pickBestHit(hits, title) {
   const target = normTitle(title);
+  // Strongest signal: "<title> (YYYY film)" or "<title> (film)" where title matches
+  const titleFilm = hits.find((h) => {
+    const m = h.title.match(/^(.+?) \((?:\d{4} )?film\)$/i);
+    return m && normTitle(m[1]) === target;
+  });
+  if (titleFilm) return titleFilm;
+  // Any "(YYYY film)" or "(film)" suffix
+  const anyFilm = hits.find((h) => /\(\d{4} film\)$|\(film\)$/i.test(h.title));
+  if (anyFilm) return anyFilm;
+  // Exact title match (for films with no disambiguation, e.g. "Inception")
   const exact = hits.find((h) => normTitle(h.title) === target);
   if (exact) return exact;
-  const filmSuffix = hits.find((h) => /\(\d{4} film\)$|\(film\)$/i.test(h.title));
-  if (filmSuffix) return filmSuffix;
+  // Starts-with fallback
   const starts = hits.find((h) => normTitle(h.title).startsWith(target));
   if (starts) return starts;
   return null;

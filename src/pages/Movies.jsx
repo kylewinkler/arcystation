@@ -5,7 +5,7 @@ import { searchMovies, discoverMovies, getGenreList, getRecommendations, posterU
 import { getAllWatchedTmdbIds, getAllWatchedMovies } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
-import { DISCOVER_NO_RESULTS, WATCHED_NO_MATCHES, WATCHED_NONE } from '../lib/copy/empty';
+import { DISCOVER_NO_RESULTS, WATCHED_NONE } from '../lib/copy/empty';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import WatchedPoster from '../components/movies/WatchedPoster';
 import QuickActionModal from '../components/modal/QuickActionModal';
@@ -60,13 +60,10 @@ export default function Movies() {
   // ── Quick action modal ──
   const [quickActionMovie, setQuickActionMovie] = useState(null);
 
-  // ── Watched state ──
-  const [watchedMovies, setWatchedMovies] = useState([]);
+  // ── Watched preview state (recent 18) ──
+  const [watchedPreview, setWatchedPreview] = useState([]);
   const [watchedLoading, setWatchedLoading] = useState(false);
   const [watchedLoaded, setWatchedLoaded] = useState(false);
-  const [watchedSearch, setWatchedSearch] = useState('');
-  const [watchedYear, setWatchedYear] = useState('all');
-  const [watchedGenre, setWatchedGenre] = useState('');
 
   // Load genres + watched set once
   useEffect(() => {
@@ -199,39 +196,16 @@ export default function Movies() {
     loadDiscover(page + 1, true);
   }
 
-  // ── Watched effects ──
+  // ── Watched preview effect — fetch 18 most recent on tab open ──
   useEffect(() => {
     if (section !== 'watched' || watchedLoaded || !user) return;
     setWatchedLoading(true);
-    getAllWatchedMovies(user.uid).then((movies) => {
-      setWatchedMovies(movies);
+    getAllWatchedMovies(user.uid, 18).then((movies) => {
+      setWatchedPreview(movies);
       setWatchedLoaded(true);
       setWatchedLoading(false);
     });
   }, [section, user]);
-
-  // Watched filtering
-  const watchedYearSet = new Set();
-  watchedMovies.forEach((m) => { if (m.year) watchedYearSet.add(String(m.year)); });
-  const watchedYears = [...watchedYearSet].sort((a, b) => b - a);
-
-  const watchedYearFiltered = watchedYear === 'all'
-    ? watchedMovies
-    : watchedMovies.filter((m) => String(m.year) === watchedYear);
-
-  const watchedAvailableGenres = {};
-  watchedYearFiltered.forEach((m) => {
-    (m.genreIds || []).forEach((gid) => {
-      if (genres[gid]) watchedAvailableGenres[gid] = genres[gid];
-    });
-  });
-  const watchedSortedGenres = Object.entries(watchedAvailableGenres).sort((a, b) => a[1].localeCompare(b[1]));
-
-  const watchedFiltered = watchedYearFiltered.filter((m) => {
-    if (watchedSearch && !m.title.toLowerCase().includes(watchedSearch.toLowerCase())) return false;
-    if (watchedGenre && !(m.genreIds || []).includes(Number(watchedGenre))) return false;
-    return true;
-  });
 
   // Section switching
   function switchSection(s) {
@@ -358,69 +332,37 @@ export default function Movies() {
         <>
           {watchedLoading ? (
             <LoadingScreen />
-          ) : (
+          ) : watchedPreview.length > 0 ? (
             <>
-              {/* Filters */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={watchedSearch}
-                  onChange={(e) => setWatchedSearch(e.target.value)}
-                  placeholder="Search your watched..."
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500"
-                />
-                <select
-                  value={watchedYear}
-                  onChange={(e) => { setWatchedYear(e.target.value); setWatchedGenre(''); }}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
-                >
-                  <option value="all">All years</option>
-                  {watchedYears.map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-                {watchedSortedGenres.length > 0 && (
-                  <select
-                    value={watchedGenre}
-                    onChange={(e) => setWatchedGenre(e.target.value)}
-                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
-                  >
-                    <option value="">All genres</option>
-                    {watchedSortedGenres.map(([gid, name]) => (
-                      <option key={gid} value={gid}>{name}</option>
-                    ))}
-                  </select>
-                )}
+              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
+                {watchedPreview.map((m) => (
+                  <WatchedPoster
+                    key={m.tmdbId}
+                    tmdbId={m.tmdbId}
+                    title={m.title}
+                    posterPath={m.posterPath}
+                    rating={m.rating}
+                  />
+                ))}
               </div>
-
-              {/* Count */}
-              {(watchedSearch || watchedGenre) && (
-                <p className="text-sm text-gray-500">
-                  Showing {watchedFiltered.length} of {watchedYearFiltered.length}
-                </p>
-              )}
-
-              {/* Grid */}
-              {watchedFiltered.length > 0 ? (
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
-                  {watchedFiltered.map((m) => (
-                    <WatchedPoster
-                      key={m.tmdbId}
-                      tmdbId={m.tmdbId}
-                      title={m.title}
-                      posterPath={m.posterPath}
-                      rating={m.rating}
-                    />
-                  ))}
+              {user && (
+                <div className="text-center pt-2 pb-4">
+                  <Link
+                    to={`/watched/${user.uid}`}
+                    state={{ backTo: '/movies?section=watched', backLabel: 'Back to discover' }}
+                    className="text-sm text-purple-400 hover:text-purple-300 border border-gray-700 hover:border-purple-500 px-6 py-2 rounded-lg transition-colors inline-block"
+                  >
+                    View all →
+                  </Link>
                 </div>
-              ) : (
-                <NotFound
-                  title={watchedSearch || watchedGenre ? WATCHED_NO_MATCHES.title : WATCHED_NONE.title}
-                  subtitle={watchedSearch || watchedGenre ? WATCHED_NO_MATCHES.subtitle : WATCHED_NONE.subtitle}
-                  scene={watchedSearch || watchedGenre ? WATCHED_NO_MATCHES.scene : WATCHED_NONE.scene}
-                />
               )}
             </>
+          ) : (
+            <NotFound
+              title={WATCHED_NONE.title}
+              subtitle={WATCHED_NONE.subtitle}
+              scene={WATCHED_NONE.scene}
+            />
           )}
         </>
       )}

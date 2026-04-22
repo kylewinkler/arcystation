@@ -2,26 +2,23 @@ import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  getFriends, getPendingRequests, getUserProfile,
+  getFriendshipsWithMeta, getPendingRequests, getUserProfile,
   searchUsersByName, sendFriendRequest, acceptFriendRequest, removeFriend,
-  getSuggestedFriends, getNotifications,
+  getSuggestedFriends, getNotifications, getReactionsForReviews,
+  markAllNotificationsRead,
 } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 import { FRIENDS_NONE, FRIENDS_NO_RESULTS } from '../lib/copy/empty';
 
-const FEED_TYPES = new Set([
-  'watched_movie',
-  'created_list',
-  'finished_list',
-  'joined_collection',
-  'friend_accepted',
-]);
+const FEED_PAGE_SIZE = 10;
+const FEED_MAX = 100;
 
 export default function Friends() {
   const { user } = useAuth();
-  const [friends, setFriends] = useState([]);
+  const [friendships, setFriendships] = useState([]);
+  const [recentFriends, setRecentFriends] = useState([]);
   const [pending, setPending] = useState([]);
   const [suggested, setSuggested] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,7 +26,9 @@ export default function Friends() {
   const [searching, setSearching] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [feed, setFeed] = useState([]);
+  const [feedLimit, setFeedLimit] = useState(FEED_PAGE_SIZE);
   const [feedProfiles, setFeedProfiles] = useState({});
+  const [reactionsByReview, setReactionsByReview] = useState({});
   const [loading, setLoading] = useState(true);
   const debounceRef = useRef(null);
   const searchWrapRef = useRef(null);
@@ -50,17 +49,21 @@ export default function Friends() {
 
   async function loadAll() {
     setLoading(true);
-    const [friendUids, pendingRequests, suggestions, notifs] = await Promise.all([
-      getFriends(user.uid),
+    const [friendshipMeta, pendingRequests, suggestions, notifs] = await Promise.all([
+      getFriendshipsWithMeta(user.uid),
       getPendingRequests(user.uid),
       getSuggestedFriends(user.uid),
       getNotifications(user.uid),
     ]);
 
-    const friendProfiles = await Promise.all(
-      friendUids.map((uid) => getUserProfile(uid))
+    friendshipMeta.sort(
+      (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
     );
-    setFriends(friendProfiles.filter(Boolean));
+    setFriendships(friendshipMeta);
+
+    const recentUids = friendshipMeta.slice(0, 2).map((f) => f.uid);
+    const recentProfiles = await Promise.all(recentUids.map((uid) => getUserProfile(uid)));
+    setRecentFriends(recentProfiles.filter(Boolean));
 
     const pendingWithProfiles = await Promise.all(
       pendingRequests.map(async (req) => {
@@ -72,11 +75,11 @@ export default function Friends() {
     setPending(pendingWithProfiles);
     setSuggested(suggestions);
 
-    const friendSet = new Set(friendUids);
-    const feedItems = notifs.filter(
-      (n) => FEED_TYPES.has(n.type) && friendSet.has(n.fromUid)
-    ).slice(0, 30);
+    const feedItems = notifs
+      .filter((n) => n.type !== 'friend_request')
+      .slice(0, FEED_MAX);
     setFeed(feedItems);
+    setFeedLimit(FEED_PAGE_SIZE);
 
     const uids = [...new Set(feedItems.map((n) => n.fromUid))];
     const profileMap = {};
@@ -87,6 +90,24 @@ export default function Friends() {
       })
     );
     setFeedProfiles(profileMap);
+
+    const reviewRefs = [];
+    const seen = new Set();
+    feedItems.forEach((n) => {
+      if (n.type === 'watched_movie' && n.fromUid && n.data?.tmdbId) {
+        const key = `${n.fromUid}__${n.data.tmdbId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          reviewRefs.push({ reviewerUid: n.fromUid, tmdbId: String(n.data.tmdbId) });
+        }
+      }
+    });
+    if (reviewRefs.length > 0) {
+      const map = await getReactionsForReviews(reviewRefs);
+      setReactionsByReview(map);
+    }
+
+    await markAllNotificationsRead(user.uid);
 
     setLoading(false);
   }
@@ -129,9 +150,11 @@ export default function Friends() {
   }
 
   const incomingRequests = pending.filter((r) => r.requestedBy !== user.uid);
-  const friendUidSet = new Set(friends.map((f) => f.uid));
+  const friendUidSet = new Set(friendships.map((f) => f.uid));
   const pendingUidSet = new Set(pending.map((p) => p.otherUser?.uid));
   const showDropdown = searchFocused && searchQuery.trim().length > 0;
+  const visibleFeed = feed.slice(0, feedLimit);
+  const canLoadMore = feedLimit < feed.length;
 
   function relationLabel(uid) {
     if (friendUidSet.has(uid)) return 'Friend';
@@ -244,10 +267,37 @@ export default function Friends() {
         </div>
       )}
 
-      {/* Activity feed — the main event */}
+      {/* Friends — compact, recently added on top */}
+      {recentFriends.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">
+            Recently Added <span className="text-gray-600">· {friendships.length} {friendships.length === 1 ? 'friend' : 'friends'}</span>
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {recentFriends.map((friend) => (
+              <Link
+                key={friend.uid}
+                to={`/user/${friend.uid}`}
+                className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-lg p-2.5 hover:border-gray-700 transition-colors"
+              >
+                {friend.photoURL ? (
+                  <img src={friend.photoURL} alt="" className="w-8 h-8 rounded-full shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
+                    {friend.displayName?.[0]}
+                  </div>
+                )}
+                <p className="text-white text-sm font-medium truncate">{friend.displayName}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Activity feed */}
       <div>
-        <h2 className="text-lg font-bold text-white mb-3">Friend Activity</h2>
-        {friends.length === 0 ? (
+        <h2 className="text-lg font-bold text-white mb-3">Activity</h2>
+        {friendships.length === 0 ? (
           <NotFound title={FRIENDS_NONE.title} subtitle={FRIENDS_NONE.subtitle} scene={FRIENDS_NONE.scene} />
         ) : feed.length === 0 ? (
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
@@ -257,17 +307,35 @@ export default function Friends() {
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {groupActivity(feed).map((g) => (
-              <NotificationItem
-                key={g.items[0].id}
-                notification={g.items[0]}
-                profile={feedProfiles[g.fromUid]}
-                extraCount={g.items.length - 1}
-                items={g.items}
-              />
-            ))}
-          </div>
+          <>
+            <div className="space-y-2">
+              {groupActivity(visibleFeed).map((g) => (
+                <NotificationItem
+                  key={g.items[0].id}
+                  notification={g.items[0]}
+                  profile={feedProfiles[g.fromUid]}
+                  extraCount={g.items.length - 1}
+                  items={g.items}
+                  currentUserUid={user.uid}
+                  reactionsByReview={reactionsByReview}
+                  onReactionChange={(reviewerUid, tmdbId, newReactions) => {
+                    setReactionsByReview((prev) => ({
+                      ...prev,
+                      [`${reviewerUid}__${tmdbId}`]: newReactions,
+                    }));
+                  }}
+                />
+              ))}
+            </div>
+            {canLoadMore && (
+              <button
+                onClick={() => setFeedLimit((n) => n + FEED_PAGE_SIZE)}
+                className="w-full mt-3 text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-700 rounded-lg py-2.5 transition-colors"
+              >
+                Load more
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -298,33 +366,6 @@ export default function Friends() {
                   Add
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Friends list — compact, bottom */}
-      {friends.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">
-            Your {friends.length} {friends.length === 1 ? 'Friend' : 'Friends'}
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {friends.map((friend) => (
-              <Link
-                key={friend.uid}
-                to={`/user/${friend.uid}`}
-                className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-lg p-2.5 hover:border-gray-700 transition-colors"
-              >
-                {friend.photoURL ? (
-                  <img src={friend.photoURL} alt="" className="w-8 h-8 rounded-full shrink-0" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
-                    {friend.displayName?.[0]}
-                  </div>
-                )}
-                <p className="text-white text-sm font-medium truncate">{friend.displayName}</p>
-              </Link>
             ))}
           </div>
         </div>

@@ -72,7 +72,7 @@ export default function FriendReviewsCarousel({ reviews, movieTitle, posterPath,
           const isActive = i === index;
           const isSelf = user?.uid === r.profile.uid;
           const ringClass = isSelf
-            ? 'ring-2 ring-[var(--color-watched-glow)]'
+            ? `ring-2 ring-[var(--color-watched-glow)] ${isActive ? '' : 'opacity-60 hover:opacity-100'}`
             : isActive
               ? 'ring-2 ring-purple-500'
               : 'opacity-60 hover:opacity-100';

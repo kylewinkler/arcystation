@@ -6,15 +6,31 @@ import {
   getPinnedLists,
   getPendingListInvites, acceptListInvite, declineListInvite,
   getAllWatchedTmdbIds, reconcileUserWatchedCounts,
+  getWatchedInfo,
 } from '../lib/firestore';
 import { discoverMovies, posterUrl } from '../lib/tmdb';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
+import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
 import NoComms from '../assets/images/arcy-scenes/no-comms.png';
 
 function pickRandom(arr) {
   return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
+}
+
+// ISO week key like "2026-W17" — stable Monday-to-Sunday bucket for the weekly pick.
+function getWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${weekNum}`;
+}
+
+function weekPickStorageKey(uid) {
+  return `weekPick_${uid}`;
 }
 
 const currentYear = new Date().getFullYear();
@@ -28,7 +44,8 @@ export default function Home() {
   const { user } = useAuth();
   const [invites, setInvites] = useState([]);
   const [continueItem, setContinueItem] = useState(null);
-  const [tonightPick, setTonightPick] = useState(null);
+  const [weekPick, setWeekPick] = useState(null);
+  const [weekPickReview, setWeekPickReview] = useState(null);
   const [almostDone, setAlmostDone] = useState(null);
   const [hasLists, setHasLists] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -184,21 +201,47 @@ export default function Home() {
       }
     }
 
-    // Tonight's pick: random unwatched from a random list (excluding continue & almostDone picks)
-    const shuffledLists = [...allIncomplete].sort(() => Math.random() - 0.5);
-    for (const item of shuffledLists) {
-      const candidates = (movieData[item.listId] || [])
-        .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
-        .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
-        .filter(isReleased);
-      if (candidates.length > 0) {
-        const pick = pickRandom(candidates);
-        setTonightPick({
-          movie: pick,
-          listTitle: item.list?.title || '',
-          listId: item.listId || '',
-        });
-        break;
+    // This week's pick: stable per ISO week, persisted to localStorage so the
+    // user sees the same movie all week even after watching it.
+    const weekKey = getWeekKey();
+    const storageKey = weekPickStorageKey(user.uid);
+    let pick = null;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.weekKey === weekKey && parsed.movie?.tmdbId) pick = parsed;
+      }
+    } catch { /* corrupt entry — regenerate */ }
+
+    if (!pick) {
+      const shuffledLists = [...allIncomplete].sort(() => Math.random() - 0.5);
+      for (const item of shuffledLists) {
+        const candidates = (movieData[item.listId] || [])
+          .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
+          .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
+          .filter(isReleased);
+        if (candidates.length > 0) {
+          const movie = pickRandom(candidates);
+          pick = {
+            weekKey,
+            movie,
+            listTitle: item.list?.title || '',
+            listId: item.listId || '',
+          };
+          try { localStorage.setItem(storageKey, JSON.stringify(pick)); } catch { /* quota — ignore */ }
+          break;
+        }
+      }
+    }
+
+    if (pick) {
+      setWeekPick(pick);
+      if (ids.has(pick.movie.tmdbId)) {
+        try {
+          const info = await getWatchedInfo(user.uid, pick.movie.tmdbId);
+          if (info) setWeekPickReview(info);
+        } catch { /* non-fatal */ }
       }
     }
 
@@ -207,7 +250,8 @@ export default function Home() {
 
   if (loading) return <LoadingScreen />;
 
-  const hasAnyAction = invites.length > 0 || tonightPick || continueItem || almostDone;
+  const pickWatched = !!weekPick && watchedIds.has(weekPick.movie.tmdbId);
+  const hasAnyAction = invites.length > 0 || weekPick || continueItem || almostDone;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -278,40 +322,58 @@ export default function Home() {
         </div>
       )}
 
-      {/* Hero: Tonight's pick */}
-      {tonightPick && (
+      {/* Hero: This week's pick */}
+      {weekPick && (
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Not sure what to watch?</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+            {pickWatched ? "You watched this week's pick" : 'Not sure what to watch?'}
+          </p>
           <Link
-            to={`/movie/${tonightPick.movie.tmdbId}`}
+            to={`/movie/${weekPick.movie.tmdbId}`}
             className="block group"
           >
-            <div className="relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 group-hover:border-purple-500 transition-colors">
-              {tonightPick.movie.posterPath ? (
+            <div
+              className={
+                pickWatched
+                  ? 'relative rounded-xl overflow-hidden bg-gray-900 border border-orange-500 shadow-[0_0_30px_-5px_rgba(249,115,22,0.6)] transition-colors'
+                  : 'relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 group-hover:border-purple-500 transition-colors'
+              }
+            >
+              {weekPick.movie.posterPath ? (
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl"
-                  style={{ backgroundImage: `url(${posterUrl(tonightPick.movie.posterPath, 'w500')})` }}
+                  style={{ backgroundImage: `url(${posterUrl(weekPick.movie.posterPath, 'w500')})` }}
                 />
               ) : null}
               <div className="relative flex gap-4 p-4">
-                {tonightPick.movie.posterPath ? (
+                {weekPick.movie.posterPath ? (
                   <img
-                    src={posterUrl(tonightPick.movie.posterPath, 'w342')}
-                    alt={tonightPick.movie.title}
+                    src={posterUrl(weekPick.movie.posterPath, 'w342')}
+                    alt={weekPick.movie.title}
                     className="w-28 sm:w-32 aspect-[2/3] rounded-lg object-cover shrink-0 shadow-lg"
                   />
                 ) : (
                   <div className="w-28 sm:w-32 aspect-[2/3] rounded-lg bg-gray-800 shrink-0" />
                 )}
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <p className="text-yellow-400/90 text-xs font-medium mb-1">🎬 Tonight's pick</p>
+                  <p className={`text-xs font-medium mb-1 ${pickWatched ? 'text-orange-400' : 'text-yellow-400/90'}`}>
+                    {pickWatched ? '🍿 Your pick this week' : "🎬 This week's pick"}
+                  </p>
                   <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight">
-                    {tonightPick.movie.title}
+                    {weekPick.movie.title}
                   </h2>
-                  {tonightPick.movie.year && (
-                    <p className="text-gray-400 text-sm mt-0.5">{tonightPick.movie.year}</p>
+                  {weekPick.movie.year && (
+                    <p className="text-gray-400 text-sm mt-0.5">{weekPick.movie.year}</p>
                   )}
-                  <p className="text-gray-500 text-xs mt-2">from {tonightPick.listTitle}</p>
+                  <p className="text-gray-500 text-xs mt-2">from {weekPick.listTitle}</p>
+                  {pickWatched && weekPickReview && (weekPickReview.rating || weekPickReview.note) && (
+                    <div className="mt-2">
+                      {weekPickReview.rating > 0 && <StarRating value={weekPickReview.rating} size="sm" />}
+                      {weekPickReview.note && (
+                        <p className="text-gray-300 text-xs italic mt-1 line-clamp-2">"{weekPickReview.note}"</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

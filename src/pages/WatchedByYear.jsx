@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getUserProfile, getAllWatchedMovies, getAllWatchedTmdbIds } from '../lib/firestore';
 import { getGenreList } from '../lib/tmdb';
 import WatchedPoster from '../components/movies/WatchedPoster';
@@ -13,6 +13,7 @@ import { WATCHED_NO_MATCHES, WATCHED_NONE } from '../lib/copy/empty';
 export default function WatchedByYear() {
   const { uid, year: urlYear } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [allMovies, setAllMovies] = useState([]);
@@ -90,7 +91,10 @@ export default function WatchedByYear() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <BackButton to={`/user/${uid}`} label={isOwner ? 'Back to profile' : `Back to ${profile?.displayName}`} />
+      <BackButton
+        to={location.state?.backTo || `/user/${uid}`}
+        label={location.state?.backLabel || (isOwner ? 'Back to profile' : `Back to ${profile?.displayName}`)}
+      />
       <ProfileHeader profile={profile} isOwner={isOwner} />
       <p className="text-sm text-gray-500">{yearFiltered.length} movies watched</p>
 

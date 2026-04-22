@@ -1,6 +1,6 @@
 import {
   collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  setDoc, query, where, orderBy, serverTimestamp, increment,
+  setDoc, query, where, orderBy, limit, serverTimestamp, increment,
   onSnapshot, writeBatch, arrayUnion, arrayRemove, deleteField,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -444,8 +444,9 @@ export async function getAllWatchedTmdbIds(uid) {
   return new Set(snap.docs.map((d) => d.data().tmdbId));
 }
 
-export async function getAllWatchedMovies(uid) {
-  const q = query(collection(db, 'reviews'), where('uid', '==', uid), orderBy('watchedAt', 'desc'));
+export async function getAllWatchedMovies(uid, limitCount) {
+  const base = [collection(db, 'reviews'), where('uid', '==', uid), orderBy('watchedAt', 'desc')];
+  const q = limitCount ? query(...base, limit(limitCount)) : query(...base);
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
@@ -467,6 +468,10 @@ export async function saveMoviePlot(tmdbId, data) {
     ...data,
     fetchedAt: serverTimestamp(),
   });
+}
+
+export async function deleteMoviePlot(tmdbId) {
+  await deleteDoc(doc(db, 'moviePlots', String(tmdbId)));
 }
 
 export async function setReviewReaction(reviewerUid, tmdbId, reactorUid, type, movieMeta = {}) {
@@ -597,6 +602,24 @@ export async function getFriends(uid) {
   snap1.docs.forEach((d) => friendUids.push(d.data().uid2));
   snap2.docs.forEach((d) => friendUids.push(d.data().uid1));
   return friendUids;
+}
+
+export async function getFriendshipsWithMeta(uid) {
+  const q1 = query(
+    collection(db, 'friendships'),
+    where('uid1', '==', uid),
+    where('status', '==', 'accepted')
+  );
+  const q2 = query(
+    collection(db, 'friendships'),
+    where('uid2', '==', uid),
+    where('status', '==', 'accepted')
+  );
+  const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+  const result = [];
+  snap1.docs.forEach((d) => result.push({ uid: d.data().uid2, createdAt: d.data().createdAt }));
+  snap2.docs.forEach((d) => result.push({ uid: d.data().uid1, createdAt: d.data().createdAt }));
+  return result;
 }
 
 export async function getPendingRequests(uid) {
