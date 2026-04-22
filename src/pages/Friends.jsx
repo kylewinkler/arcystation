@@ -61,7 +61,7 @@ export default function Friends() {
     );
     setFriendships(friendshipMeta);
 
-    const recentUids = friendshipMeta.slice(0, 2).map((f) => f.uid);
+    const recentUids = friendshipMeta.slice(0, 13).map((f) => f.uid);
     const recentProfiles = await Promise.all(recentUids.map((uid) => getUserProfile(uid)));
     setRecentFriends(recentProfiles.filter(Boolean));
 
@@ -153,8 +153,12 @@ export default function Friends() {
   const friendUidSet = new Set(friendships.map((f) => f.uid));
   const pendingUidSet = new Set(pending.map((p) => p.otherUser?.uid));
   const showDropdown = searchFocused && searchQuery.trim().length > 0;
-  const visibleFeed = feed.slice(0, feedLimit);
-  const canLoadMore = feedLimit < feed.length;
+  // Paginate by grouped tiles, not raw notifications — otherwise a friend's
+  // run of consecutive same-type activity collapses into one tile and
+  // "Load more" appears to do nothing but bump the "and N more" counter.
+  const allGroups = groupActivity(feed);
+  const visibleGroups = allGroups.slice(0, feedLimit);
+  const canLoadMore = feedLimit < allGroups.length;
 
   function relationLabel(uid) {
     if (friendUidSet.has(uid)) return 'Friend';
@@ -273,21 +277,21 @@ export default function Friends() {
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">
             Recently Added <span className="text-gray-600">· {friendships.length} {friendships.length === 1 ? 'friend' : 'friends'}</span>
           </h2>
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="flex gap-3 overflow-x-auto">
             {recentFriends.map((friend) => (
               <Link
                 key={friend.uid}
                 to={`/user/${friend.uid}`}
-                className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-lg p-2.5 hover:border-gray-700 transition-colors"
+                title={friend.displayName}
+                className="shrink-0 rounded-full ring-2 ring-transparent hover:ring-purple-500 transition"
               >
                 {friend.photoURL ? (
-                  <img src={friend.photoURL} alt="" className="w-8 h-8 rounded-full shrink-0" />
+                  <img src={friend.photoURL} alt={friend.displayName} className="w-10 h-10 rounded-full" />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold text-white">
                     {friend.displayName?.[0]}
                   </div>
                 )}
-                <p className="text-white text-sm font-medium truncate">{friend.displayName}</p>
               </Link>
             ))}
           </div>
@@ -296,7 +300,7 @@ export default function Friends() {
 
       {/* Activity feed */}
       <div>
-        <h2 className="text-lg font-bold text-white mb-3">Activity</h2>
+        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">Friend Activity</h2>
         {friendships.length === 0 ? (
           <NotFound title={FRIENDS_NONE.title} subtitle={FRIENDS_NONE.subtitle} scene={FRIENDS_NONE.scene} />
         ) : feed.length === 0 ? (
@@ -309,7 +313,7 @@ export default function Friends() {
         ) : (
           <>
             <div className="space-y-2">
-              {groupActivity(visibleFeed).map((g) => (
+              {visibleGroups.map((g) => (
                 <NotificationItem
                   key={g.items[0].id}
                   notification={g.items[0]}
