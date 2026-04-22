@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getNotifications, markAllNotificationsRead, getUserProfile, acceptFriendRequest, removeFriend, deleteNotification } from '../lib/firestore';
+import { getNotifications, markAllNotificationsRead, getUserProfile, acceptFriendRequest, removeFriend, deleteNotification, getReactionsForReviews } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 
@@ -8,6 +8,7 @@ export default function Notifications() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [profiles, setProfiles] = useState({});
+  const [reactionsByReview, setReactionsByReview] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,6 +30,22 @@ export default function Notifications() {
       })
     );
     setProfiles(profileMap);
+
+    const reviewRefs = [];
+    const seen = new Set();
+    notifs.forEach((n) => {
+      if (n.type === 'watched_movie' && n.fromUid && n.data?.tmdbId) {
+        const key = `${n.fromUid}__${n.data.tmdbId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          reviewRefs.push({ reviewerUid: n.fromUid, tmdbId: String(n.data.tmdbId) });
+        }
+      }
+    });
+    if (reviewRefs.length > 0) {
+      const map = await getReactionsForReviews(reviewRefs);
+      setReactionsByReview(map);
+    }
 
     await markAllNotificationsRead(user.uid);
 
@@ -68,6 +85,8 @@ export default function Notifications() {
               onFriendAction={handleFriendAction}
               extraCount={g.items.length - 1}
               items={g.items}
+              currentUserUid={user.uid}
+              reactionsByReview={reactionsByReview}
             />
           ))}
         </div>

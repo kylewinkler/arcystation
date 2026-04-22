@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import StarRating from './StarRating';
+import ReviewReactions from './ReviewReactions';
+import { useAuth } from '../context/AuthContext';
 
 const CYCLE_MS = 5000;
 const ANIM_OUT_MS = 300;
 const PAUSE_AFTER_CLICK_MS = 15000;
 
-export default function FriendReviewsCarousel({ reviews }) {
+export default function FriendReviewsCarousel({ reviews, movieTitle, posterPath }) {
+  const { user } = useAuth();
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState('in');
   const [paused, setPaused] = useState(false);
@@ -108,6 +111,14 @@ export default function FriendReviewsCarousel({ reviews }) {
         ) : (
           !hasRating && <p className="text-gray-500 text-sm mt-2">Watched it</p>
         )}
+        <ReviewReactions
+          reviewerUid={current.profile.uid}
+          tmdbId={current.review.tmdbId}
+          reactions={current.review.reactions || {}}
+          currentUserUid={user?.uid}
+          movieTitle={movieTitle}
+          posterPath={posterPath}
+        />
       </div>
     </div>
   );

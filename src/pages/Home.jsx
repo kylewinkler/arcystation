@@ -187,8 +187,7 @@ export default function Home() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      sdf
-      {/* Pending invites — top, urgent */}
+    {/* Pending invites — top, urgent */}
       {invites.length > 0 && (
         <div className="space-y-2">
           {invites.map((invite) => (

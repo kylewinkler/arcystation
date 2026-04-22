@@ -7,7 +7,9 @@ import {
   getUserLists, addMovieToList, removeMovieFromList, createList, startList,
   markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
   getAllWatchedTmdbIds, notifyFriends, getFriendReviewsForMovie,
+  getMoviePlot, saveMoviePlot,
 } from '../lib/firestore';
+import { fetchWikipediaPlot } from '../lib/wikipedia';
 import StarRating from '../components/StarRating';
 import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/loading/Loading';
@@ -38,11 +40,16 @@ export default function MovieDetail() {
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
   const [friendReviews, setFriendReviews] = useState([]);
+  const [plotOpen, setPlotOpen] = useState(false);
+  const [plotData, setPlotData] = useState(null);
+  const [plotLoading, setPlotLoading] = useState(false);
   const addMenuRef = useRef(null);
   const { showToast } = useToast();
 
   useEffect(() => {
     loadMovie();
+    setPlotOpen(false);
+    setPlotData(null);
   }, [tmdbId]);
 
   useEffect(() => {
@@ -215,6 +222,30 @@ export default function MovieDetail() {
     }
   }
 
+  async function handleTogglePlot() {
+    if (plotOpen) {
+      setPlotOpen(false);
+      return;
+    }
+    setPlotOpen(true);
+    if (plotData) return;
+
+    setPlotLoading(true);
+    try {
+      let data = await getMoviePlot(tmdbId);
+      if (!data) {
+        data = await fetchWikipediaPlot(movie.title, movie.year);
+        await saveMoviePlot(tmdbId, data).catch(() => {});
+      }
+      setPlotData(data);
+    } catch (err) {
+      console.error('Failed to load plot:', err);
+      setPlotData({ error: true });
+    } finally {
+      setPlotLoading(false);
+    }
+  }
+
   async function handleMarkWatched() {
     await markWatchedStandalone(user.uid, tmdbId, {
       rating: rating || null,
@@ -297,8 +328,64 @@ export default function MovieDetail() {
         <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
       )}
 
+      <div>
+        <button
+          onClick={handleTogglePlot}
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 border border-gray-700 hover:border-purple-500 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <span>View Plot (spoilers)</span>
+          <svg
+            className={`w-4 h-4 transition-transform ${plotOpen ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {plotOpen && (
+          <div className="mt-3 bg-gray-900/60 border border-gray-800 rounded-lg p-4">
+            {plotLoading && (
+              <p className="text-sm text-gray-500">Loading plot…</p>
+            )}
+            {!plotLoading && plotData?.error && (
+              <p className="text-sm text-gray-500">Couldn't load the plot right now. Try again in a bit.</p>
+            )}
+            {!plotLoading && plotData && !plotData.error && plotData.plot && (
+              <>
+                <div className="space-y-3 text-gray-300 text-sm leading-relaxed">
+                  {plotData.plot.split(/\n\n+/).map((para, i) => (
+                    <p key={i}>{para}</p>
+                  ))}
+                </div>
+                {plotData.wikipediaUrl && (
+                  <p className="mt-3 text-xs text-gray-500">
+                    Source:{' '}
+                    <a
+                      href={plotData.wikipediaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-purple-400 underline"
+                    >
+                      Wikipedia
+                    </a>
+                  </p>
+                )}
+              </>
+            )}
+            {!plotLoading && plotData && !plotData.error && !plotData.plot && (
+              <p className="text-sm text-gray-500">
+                No detailed plot found on Wikipedia for this movie.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       {friendReviews.length > 0 && (
-        <FriendReviewsCarousel reviews={friendReviews} />
+        <FriendReviewsCarousel
+          reviews={friendReviews}
+          movieTitle={movie.title}
+          posterPath={movie.posterPath}
+        />
       )}
 
       {/* Watched status + review */}

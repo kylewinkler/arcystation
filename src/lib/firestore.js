@@ -333,6 +333,11 @@ export function subscribeToWatched(uid, listId, callback) {
 
 export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieData } = {}) {
   const docId = reviewDocId(uid, tmdbId);
+  const ref = doc(db, 'reviews', docId);
+  const prev = await getDoc(ref);
+  const prevRating = prev.exists() ? (prev.data().rating ?? null) : null;
+  const newRating = rating ?? null;
+
   const entry = { uid, tmdbId, watchedAt: serverTimestamp() };
   if (movieData) {
     entry.title = movieData.title || '';
@@ -342,7 +347,10 @@ export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieDa
   }
   if (rating != null) entry.rating = rating;
   if (note != null) entry.note = note;
-  await setDoc(doc(db, 'reviews', docId), entry, { merge: true });
+  if (prev.exists() && prevRating !== newRating) {
+    entry.reactions = deleteField();
+  }
+  await setDoc(ref, entry, { merge: true });
 }
 
 export async function unmarkWatchedStandalone(uid, tmdbId) {
@@ -371,6 +379,57 @@ export async function getAllWatchedMovies(uid) {
 export async function getWatchedMoviesByYear(uid, year) {
   const all = await getAllWatchedMovies(uid);
   return all.filter((m) => String(m.year) === String(year));
+}
+
+// ── Movie plots (cached from Wikipedia) ──
+
+export async function getMoviePlot(tmdbId) {
+  const snap = await getDoc(doc(db, 'moviePlots', String(tmdbId)));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function saveMoviePlot(tmdbId, data) {
+  await setDoc(doc(db, 'moviePlots', String(tmdbId)), {
+    ...data,
+    fetchedAt: serverTimestamp(),
+  });
+}
+
+export async function setReviewReaction(reviewerUid, tmdbId, reactorUid, type, movieMeta = {}) {
+  const docId = reviewDocId(reviewerUid, tmdbId);
+  const ref = doc(db, 'reviews', docId);
+
+  if (type === null) {
+    await updateDoc(ref, { [`reactions.${reactorUid}`]: deleteField() });
+    return;
+  }
+
+  const snap = await getDoc(ref);
+  const prev = snap.exists() ? snap.data().reactions?.[reactorUid] : undefined;
+  await updateDoc(ref, { [`reactions.${reactorUid}`]: type });
+
+  if (prev !== type && reactorUid !== reviewerUid) {
+    await createNotification('review_reaction', reactorUid, reviewerUid, {
+      reaction: type,
+      tmdbId: String(tmdbId),
+      movieTitle: movieMeta.movieTitle || null,
+      posterPath: movieMeta.posterPath || null,
+    });
+  }
+}
+
+export async function getReactionsForReviews(reviewRefs) {
+  const snaps = await Promise.all(
+    reviewRefs.map(({ reviewerUid, tmdbId }) =>
+      getDoc(doc(db, 'reviews', reviewDocId(reviewerUid, tmdbId)))
+    )
+  );
+  const result = {};
+  snaps.forEach((snap, i) => {
+    const { reviewerUid, tmdbId } = reviewRefs[i];
+    result[`${reviewerUid}__${tmdbId}`] = snap.exists() ? (snap.data().reactions || {}) : {};
+  });
+  return result;
 }
 
 export async function getFriendReviewsForMovie(uid, tmdbId) {
