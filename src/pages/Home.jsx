@@ -3,20 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getUserAllProgress, getList, getUserProfile, getListMovies, getWatchedMovies,
-  getPinnedLists, pinList, unpinList, sortLists,
+  getPinnedLists,
   getPendingListInvites, acceptListInvite, declineListInvite,
-  getPrebuiltLists, getAllWatchedTmdbIds,
+  getAllWatchedTmdbIds,
 } from '../lib/firestore';
 import { discoverMovies, posterUrl } from '../lib/tmdb';
-import ListCard from '../components/lists/ListCard';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import LoadingScreen from '../components/loading/Loading';
-import NotFound from '../components/not-found/NotFound';
-import { HOME_NO_LISTS, HOME_NO_RESULTS } from '../lib/copy/empty';
-import { useToast } from '../context/ToastContext';
-import { randomFrom, PIN_REACTIONS, FIRST_PIN } from '../lib/copy/lore';
-import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
 
 function pickRandom(arr) {
   return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
@@ -29,49 +23,27 @@ function isReleased(m) {
   return !m.year || Number(m.year) < currentYear;
 }
 
-const PAGE_SIZE = 10;
-
 export default function Home() {
   const { user } = useAuth();
-  const { showToast } = useToast();
-  const [lists, setLists] = useState([]);
   const [invites, setInvites] = useState([]);
   const [continueItem, setContinueItem] = useState(null);
   const [tonightPick, setTonightPick] = useState(null);
+  const [almostDone, setAlmostDone] = useState(null);
+  const [hasLists, setHasLists] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [pinnedIds, setPinnedIds] = useState(new Set());
   const [popularMovies, setPopularMovies] = useState([]);
-  const [featuredLists, setFeaturedLists] = useState([]);
   const [watchedIds, setWatchedIds] = useState(new Set());
   const [quickActionMovie, setQuickActionMovie] = useState(null);
 
   useEffect(() => {
     if (!user) return;
-    loadLists();
+    load();
   }, [user]);
-
-  async function handleTogglePin(listId) {
-    const newPinned = new Set(pinnedIds);
-    if (newPinned.has(listId)) {
-      newPinned.delete(listId);
-      await unpinList(user.uid, listId);
-    } else {
-      const isFirst = pinnedIds.size === 0;
-      newPinned.add(listId);
-      await pinList(user.uid, listId);
-      showToast({
-        message: isFirst ? FIRST_PIN : randomFrom(PIN_REACTIONS),
-        image: ArcyStar,
-      });
-    }
-    setPinnedIds(newPinned);
-  }
 
   async function handleAcceptInvite(invite) {
     await acceptListInvite(invite.id, user.uid, invite.listId);
     setInvites((prev) => prev.filter((i) => i.id !== invite.id));
-    loadLists();
+    load();
   }
 
   async function handleDeclineInvite(invite) {
@@ -79,7 +51,7 @@ export default function Home() {
     setInvites((prev) => prev.filter((i) => i.id !== invite.id));
   }
 
-  async function loadLists() {
+  async function load() {
     setLoading(true);
     const [allProgress, pinned, pendingInvites] = await Promise.all([
       getUserAllProgress(user.uid),
@@ -87,7 +59,6 @@ export default function Home() {
       getPendingListInvites(user.uid),
     ]);
 
-    // Enrich invites with sender profiles and list info
     const enrichedInvites = await Promise.all(
       pendingInvites.map(async (inv) => {
         const [fromProfile, listDoc] = await Promise.all([
@@ -99,106 +70,124 @@ export default function Home() {
     );
     setInvites(enrichedInvites.filter((inv) => inv.list));
     const pinnedSet = new Set(pinned);
-    setPinnedIds(pinnedSet);
 
     const enriched = await Promise.all(
       allProgress.map(async (p) => {
         try {
           const listDoc = await getList(p.listId);
           if (!listDoc) return null;
-          let creator = null;
-          if (listDoc.createdBy && listDoc.createdBy !== user.uid) {
-            creator = await getUserProfile(listDoc.createdBy);
-          }
-          return { ...p, list: listDoc, creator };
+          return { ...p, list: listDoc };
         } catch { return null; }
       })
     );
-
     const valid = enriched.filter(Boolean);
-    setLists(sortLists(valid, pinnedSet));
+    setHasLists(valid.length > 0);
 
-    // For users with no lists, load discovery content
     if (valid.length === 0) {
-      const [popResult, prebuilt, ids] = await Promise.all([
+      const [popResult, ids] = await Promise.all([
         discoverMovies({ tab: 'popular' }),
-        getPrebuiltLists(),
         getAllWatchedTmdbIds(user.uid),
       ]);
-      setPopularMovies(popResult.movies.slice(0, 5));
-      const shuffled = [...prebuilt].sort(() => Math.random() - 0.5);
-      setFeaturedLists(shuffled.slice(0, 2));
+      setPopularMovies(popResult.movies.slice(0, 10));
       setWatchedIds(ids);
+      setLoading(false);
+      return;
     }
 
-    // Find incomplete lists for suggestions — only those with at least one watch
     const allIncomplete = valid.filter(
       (item) => item.watchedCount > 0 && item.watchedCount < (item.list.movieCount || 0)
     );
-    // Sort by most recent watch activity for continue watching
-    allIncomplete.sort((a, b) => (b.lastActivityAt?.seconds || 0) - (a.lastActivityAt?.seconds || 0));
-    // Continue watching prefers pinned lists; tonight pick uses all
-    const pinnedIncomplete = allIncomplete.filter((item) => pinnedSet.has(item.listId));
-    const continuePool = pinnedIncomplete.length > 0 ? pinnedIncomplete : allIncomplete;
 
-    if (allIncomplete.length > 0) {
-      const movieData = {};
-      const watchedData = {};
-      await Promise.all(
-        allIncomplete.map(async (item) => {
-          const [movies, watched] = await Promise.all([
-            getListMovies(item.listId),
-            getWatchedMovies(user.uid, item.listId),
-          ]);
-          movieData[item.listId] = movies;
-          watchedData[item.listId] = watched;
-        })
-      );
+    if (allIncomplete.length === 0) {
+      setLoading(false);
+      return;
+    }
 
-      // "Continue" — random unwatched movie from the most recently watched-on list (prefer pinned)
-      const continueList = continuePool[0];
-      const continueUnwatched = (movieData[continueList.listId] || [])
-        .filter((m) => !watchedData[continueList.listId]?.[m.tmdbId])
+    const movieData = {};
+    const watchedData = {};
+    await Promise.all(
+      allIncomplete.map(async (item) => {
+        const [movies, watched] = await Promise.all([
+          getListMovies(item.listId),
+          getWatchedMovies(user.uid, item.listId),
+        ]);
+        movieData[item.listId] = movies;
+        watchedData[item.listId] = watched;
+      })
+    );
+
+    // Continue watching: most-recent activity on a pinned list (fallback: any)
+    const byRecent = [...allIncomplete].sort(
+      (a, b) => (b.lastActivityAt?.seconds || 0) - (a.lastActivityAt?.seconds || 0)
+    );
+    const pinnedIncomplete = byRecent.filter((item) => pinnedSet.has(item.listId));
+    const continueList = pinnedIncomplete[0] || byRecent[0];
+    const continueUnwatched = (movieData[continueList.listId] || [])
+      .filter((m) => !watchedData[continueList.listId]?.[m.tmdbId])
+      .filter(isReleased);
+    const continueMovie = pickRandom(continueUnwatched);
+    if (continueMovie) {
+      setContinueItem({
+        movie: continueMovie,
+        listTitle: continueList.list.title,
+        listId: continueList.listId,
+      });
+    }
+
+    // Almost done: list with highest % watched (excluding the one already used for continue)
+    const withRatio = allIncomplete
+      .map((item) => ({
+        item,
+        ratio: item.watchedCount / (item.list.movieCount || 1),
+      }))
+      .filter(({ item }) => item.listId !== continueList.listId)
+      .sort((a, b) => b.ratio - a.ratio);
+
+    if (withRatio.length > 0 && withRatio[0].ratio >= 0.5) {
+      const almost = withRatio[0].item;
+      const remaining = (movieData[almost.listId] || [])
+        .filter((m) => !watchedData[almost.listId]?.[m.tmdbId])
         .filter(isReleased);
-      const continueMovie = pickRandom(continueUnwatched);
-      if (continueMovie) {
-        setContinueItem({ movie: continueMovie, listTitle: continueList.list.title, listId: continueList.listId });
-      }
-
-      // "Tonight" — pick a random list first, then a random unwatched movie from it
-      const shuffledLists = [...allIncomplete].sort(() => Math.random() - 0.5);
-      let tonightMovie = null;
-      let tonightList = null;
-      for (const item of shuffledLists) {
-        const candidates = (movieData[item.listId] || [])
-          .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
-          .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
-          .filter(isReleased);
-        if (candidates.length > 0) {
-          tonightMovie = pickRandom(candidates);
-          tonightList = item;
-          break;
-        }
-      }
-      if (tonightMovie && tonightList) {
-        setTonightPick({
-          movie: tonightMovie,
-          listTitle: tonightList.list?.title || '',
-          listId: tonightList.listId || '',
+      const almostMovie = pickRandom(remaining);
+      if (almostMovie) {
+        const left = (almost.list.movieCount || 0) - almost.watchedCount;
+        setAlmostDone({
+          movie: almostMovie,
+          listTitle: almost.list.title,
+          listId: almost.listId,
+          remaining: left,
         });
+      }
+    }
+
+    // Tonight's pick: random unwatched from a random list (excluding continue & almostDone picks)
+    const shuffledLists = [...allIncomplete].sort(() => Math.random() - 0.5);
+    for (const item of shuffledLists) {
+      const candidates = (movieData[item.listId] || [])
+        .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
+        .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
+        .filter(isReleased);
+      if (candidates.length > 0) {
+        const pick = pickRandom(candidates);
+        setTonightPick({
+          movie: pick,
+          listTitle: item.list?.title || '',
+          listId: item.listId || '',
+        });
+        break;
       }
     }
 
     setLoading(false);
   }
 
-  if (loading) {
-    return <LoadingScreen />;
-  }
+  if (loading) return <LoadingScreen />;
+
+  const hasAnyAction = invites.length > 0 || tonightPick || continueItem || almostDone;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Pending list invites */}
+      {/* Pending invites — top, urgent */}
       {invites.length > 0 && (
         <div className="space-y-2">
           {invites.map((invite) => (
@@ -235,29 +224,94 @@ export default function Home() {
         </div>
       )}
 
-      {/* Continue where you left off */}
-      {continueItem && (
-        <SuggestionCard
-          movie={continueItem.movie}
-          label={<><span className="text-white">Continue watching</span> {continueItem.listTitle}</>}
-          labelColor="text-purple-400"
-          to={`/lists/${continueItem.listId}`}
-        />
+      {/* Hero: Tonight's pick */}
+      {tonightPick && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Not sure what to watch?</p>
+          <Link
+            to={`/movie/${tonightPick.movie.tmdbId}`}
+            className="block group"
+          >
+            <div className="relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 group-hover:border-purple-500 transition-colors">
+              {tonightPick.movie.posterPath ? (
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl"
+                  style={{ backgroundImage: `url(${posterUrl(tonightPick.movie.posterPath, 'w500')})` }}
+                />
+              ) : null}
+              <div className="relative flex gap-4 p-4">
+                {tonightPick.movie.posterPath ? (
+                  <img
+                    src={posterUrl(tonightPick.movie.posterPath, 'w342')}
+                    alt={tonightPick.movie.title}
+                    className="w-28 sm:w-32 aspect-[2/3] rounded-lg object-cover shrink-0 shadow-lg"
+                  />
+                ) : (
+                  <div className="w-28 sm:w-32 aspect-[2/3] rounded-lg bg-gray-800 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <p className="text-yellow-400/90 text-xs font-medium mb-1">🎬 Tonight's pick</p>
+                  <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight">
+                    {tonightPick.movie.title}
+                  </h2>
+                  {tonightPick.movie.year && (
+                    <p className="text-gray-400 text-sm mt-0.5">{tonightPick.movie.year}</p>
+                  )}
+                  <p className="text-gray-500 text-xs mt-2">from {tonightPick.listTitle}</p>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
       )}
 
-      {/* Pick for tonight */}
-      {tonightPick && tonightPick.movie.tmdbId !== continueItem?.movie.tmdbId && (
-        <SuggestionCard
-          movie={tonightPick.movie}
-          label="Random pick for tonight"
-          sublabel={`from ${tonightPick.listTitle}`}
-        />
+      {/* Secondary actionable cards */}
+      {(continueItem || almostDone) && (
+        <div className="space-y-3">
+          {continueItem && (
+            <SuggestionCard
+              movie={continueItem.movie}
+              label={<><span className="text-white">Continue</span> {continueItem.listTitle}</>}
+              labelColor="text-purple-400"
+              to={`/lists/${continueItem.listId}`}
+            />
+          )}
+          {almostDone && (
+            <SuggestionCard
+              movie={almostDone.movie}
+              label={<><span className="text-white">Almost done with</span> {almostDone.listTitle}</>}
+              sublabel={`${almostDone.remaining} ${almostDone.remaining === 1 ? 'movie' : 'movies'} left`}
+              labelColor="text-green-400"
+              to={`/lists/${almostDone.listId}`}
+            />
+          )}
+        </div>
       )}
 
-      {/* Discovery sections shown above list activity when user has no lists */}
-      {lists.length === 0 && (
+      {/* Empty state — no lists at all */}
+      {!hasLists && (
         <div className="space-y-8">
-          {/* Popular movies row */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+            <p className="text-white font-medium mb-1">Your station is quiet.</p>
+            <p className="text-gray-400 text-sm mb-4">
+              Start a list of movies to track, or join a friend's.
+            </p>
+            <div className="flex gap-2 justify-center">
+              <Link
+                to="/lists/new"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                + New List
+              </Link>
+              <Link
+                to="/lists"
+                className="border border-gray-700 hover:border-gray-600 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Browse Collections
+              </Link>
+            </div>
+          </div>
+
           {popularMovies.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -265,7 +319,7 @@ export default function Home() {
                 <Link to="/movies" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
               </div>
               <div className="grid grid-cols-5 gap-2">
-                {popularMovies.map((m) => (
+                {popularMovies.slice(0, 5).map((m) => (
                   <button
                     key={m.tmdbId}
                     onClick={() => setQuickActionMovie(m)}
@@ -286,66 +340,25 @@ export default function Home() {
               </div>
             </div>
           )}
-
-          {/* Featured prebuilt collections */}
-          {featuredLists.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold text-white">Explore Collections</h2>
-                <Link to="/lists" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {featuredLists.map((l) => (
-                  <ListCard
-                    key={l.id}
-                    listId={l.id}
-                    title={l.title}
-                    total={l.movieCount || 0}
-                    isPrebuilt
-                    featuredPoster={l.featuredMovie?.posterPath || l.firstPoster}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Lists header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">List Activity</h1>
+      {/* Nothing actionable but user has lists (e.g. all complete or all untouched) */}
+      {hasLists && !hasAnyAction && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+          <p className="text-white font-medium mb-1">All caught up.</p>
+          <p className="text-gray-400 text-sm mb-4">
+            Start watching something from a list to see picks here.
+          </p>
           <Link
-          to="/lists/new"
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            to="/lists"
+            className="inline-block bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            + New List
+            Go to Lists
           </Link>
-      </div>
-      {lists.length === 0 ? (
-        <NotFound
-          title={HOME_NO_LISTS.title}
-          subtitle={HOME_NO_LISTS.subtitle}
-          scene={HOME_NO_LISTS.scene}
-        />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {lists.map((item) => (
-            <ListCard
-              key={item.id}
-              listId={item.listId}
-              title={item.list.title}
-              total={item.list.movieCount || 0}
-              watched={item.watchedCount}
-              isOwner={item.list.createdBy === user.uid}
-              isPrebuilt={item.list.isPrebuilt || false}
-              creatorName={item.creator?.displayName}
-              pinned={pinnedIds.has(item.listId)}
-              onTogglePin={handleTogglePin}
-              featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
-            />
-          ))}
         </div>
       )}
+
       <QuickActionModal
         isOpen={!!quickActionMovie}
         onClose={() => setQuickActionMovie(null)}

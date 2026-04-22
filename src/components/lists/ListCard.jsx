@@ -34,7 +34,10 @@ export default function ListCard({
       )}
       <div className="flex-1 min-w-0 p-4">
         <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="text-white font-medium line-clamp-2">{title}</h3>
+          <div>
+            <h3 className="text-white font-medium line-clamp-2">{title}</h3>
+            {total > 0 && <p className="text-xs text-gray-500 mt-0.5">{total} {total === 1 ? 'movie' : 'movies'}</p>}
+          </div>
           <div className="flex items-center gap-2 shrink-0">
             {isPrebuilt && <img src={ArcyPop} alt="" className="w-4 h-4" />}
             {!isPrebuilt && isOwner && <span className="text-xs text-purple-400">yours</span>}

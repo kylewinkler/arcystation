@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { getUserLists, getListMovies, getPrebuiltLists } from '../lib/firestore';
 
 import { NFR_MOVIES } from '../lib/seed-data/nfr';
+import { LOTR_TMDB_IDS } from '../lib/seed-data/lotr';
 import { ADMIN_UIDS } from '../lib/admin';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -120,6 +121,67 @@ export default function Admin() {
 
   const [seedingNFR, setSeedingNFR] = useState(false);
   const [seedNFRResult, setSeedNFRResult] = useState(null);
+
+  const [seedingLOTR, setSeedingLOTR] = useState(false);
+  const [seedLOTRResult, setSeedLOTRResult] = useState(null);
+
+  async function seedLOTR() {
+    setSeedingLOTR(true);
+    setSeedLOTRResult(null);
+    try {
+      const apiKey = import.meta.env.VITE_TMDB_API_KEY;
+
+      const listRef = await addDoc(collection(db, 'lists'), {
+        title: 'Middle-earth Collection',
+        description: 'The Lord of the Rings trilogy and The Hobbit trilogy — all six Peter Jackson Middle-earth films.',
+        createdBy: null,
+        isPrebuilt: true,
+        movieCount: 0,
+        isPublic: false,
+        shareSlug: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const listId = listRef.id;
+      let count = 0;
+      let firstPoster = null;
+
+      for (let i = 0; i < LOTR_TMDB_IDS.length; i++) {
+        const tmdbId = LOTR_TMDB_IDS[i];
+        const res = await fetch(
+          `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}`
+        );
+        const m = await res.json();
+        if (!m.id) continue;
+
+        const movieDoc = {
+          title: m.title || '',
+          posterPath: m.poster_path || null,
+          year: m.release_date ? m.release_date.slice(0, 4) : '',
+          overview: m.overview || '',
+          genreIds: (m.genres || []).map((g) => g.id),
+          order: i,
+          addedAt: serverTimestamp(),
+        };
+
+        await setDoc(doc(db, 'lists', listId, 'movies', String(tmdbId)), movieDoc);
+        if (!firstPoster && m.poster_path) firstPoster = m.poster_path;
+        count++;
+      }
+
+      await updateDoc(doc(db, 'lists', listId), {
+        movieCount: count,
+        ...(firstPoster && { firstPoster }),
+      });
+
+      setSeedLOTRResult(`Created "${listId}" with ${count} movies.`);
+      getPrebuiltLists().then(setPrebuiltLists);
+    } catch (err) {
+      console.error('LOTR seed failed:', err);
+      setSeedLOTRResult(`Error: ${err.message}`);
+    }
+    setSeedingLOTR(false);
+  }
 
   async function seedNFR() {
     setSeedingNFR(true);
@@ -392,31 +454,17 @@ export default function Admin() {
           <p className="text-xs text-gray-500 mb-3">No pre-built lists yet.</p>
         )}
         <button
-          onClick={seedScoobyDoo}
-          disabled={seeding}
+          onClick={seedLOTR}
+          disabled={seedingLOTR}
           className="bg-teal-600 hover:bg-teal-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
-          {seeding ? 'Seeding...' : 'Seed: Scooby-Doo Collection'}
+          {seedingLOTR ? 'Seeding...' : 'Seed: Middle-earth Collection'}
         </button>
-        {seedResult && (
-          <p className={`text-sm mt-2 ${seedResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
-            {seedResult}
+        {seedLOTRResult && (
+          <p className={`text-sm mt-2 ${seedLOTRResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+            {seedLOTRResult}
           </p>
         )}
-        <div className="mt-3">
-          <button
-            onClick={seedNFR}
-            disabled={seedingNFR}
-            className="bg-teal-600 hover:bg-teal-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {seedingNFR ? 'Seeding...' : `Seed: National Film Registry (${NFR_MOVIES.length} films)`}
-          </button>
-          {seedNFRResult && (
-            <p className={`text-sm mt-2 ${seedNFRResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
-              {seedNFRResult}
-            </p>
-          )}
-        </div>
       </div>
 
       <input

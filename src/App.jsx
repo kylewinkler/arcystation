@@ -16,6 +16,7 @@ import Movies from './pages/Movies';
 import MovieDetail from './pages/MovieDetail';
 import WatchedByYear from './pages/WatchedByYear';
 import Lists from './pages/Lists';
+import Friends from './pages/Friends';
 import Notifications from './pages/Notifications';
 import NotFoundPage from './pages/NotFoundPage';
 import ConstructionModal from './components/modal/ConstructionModal';
@@ -42,6 +43,7 @@ export default function App() {
                     <Route path="/lists/:id/edit" element={<EditList />} />
                     <Route path="/progress/:uid/:listId" element={<ProgressRedirect />} />
                     <Route path="/user/:uid" element={<UserProfile />} />
+                    <Route path="/friends" element={<Friends />} />
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/movies" element={<Movies />} />
                     <Route path="/movie/:tmdbId" element={<MovieDetail />} />
