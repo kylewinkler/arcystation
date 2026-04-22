@@ -21,6 +21,21 @@ export function AuthProvider({ children }) {
             email: firebaseUser.email,
             createdAt: serverTimestamp(),
           });
+        } else {
+          const stored = snap.data();
+          if (
+            stored.photoURL !== firebaseUser.photoURL ||
+            stored.displayName !== firebaseUser.displayName
+          ) {
+            await setDoc(
+              userRef,
+              {
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL,
+              },
+              { merge: true }
+            );
+          }
         }
         setUser({
           uid: firebaseUser.uid,

@@ -44,7 +44,23 @@ function mapMovieResults(results) {
   }));
 }
 
+const POPULAR_CACHE_KEY = 'tmdb_popular_page1';
+const POPULAR_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export async function discoverMovies({ tab = 'popular', genre, year, page = 1 } = {}) {
+  const canCache = tab === 'popular' && page === 1 && !genre && !year;
+  if (canCache) {
+    try {
+      const raw = localStorage.getItem(POPULAR_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached.fetchedAt && Date.now() - cached.fetchedAt < POPULAR_CACHE_TTL_MS) {
+          return { movies: cached.movies, totalPages: cached.totalPages };
+        }
+      }
+    } catch { /* fall through to fetch */ }
+  }
+
   let url;
   if (tab === 'now_playing') {
     url = `${BASE_URL}/movie/now_playing?api_key=${API_KEY}&page=${page}`;
@@ -61,10 +77,18 @@ export async function discoverMovies({ tab = 'popular', genre, year, page = 1 } 
   }
   const res = await fetch(url);
   const data = await res.json();
-  return {
+  const result = {
     movies: mapMovieResults(data.results),
     totalPages: Math.min(data.total_pages || 1, 500),
   };
+
+  if (canCache) {
+    try {
+      localStorage.setItem(POPULAR_CACHE_KEY, JSON.stringify({ ...result, fetchedAt: Date.now() }));
+    } catch { /* quota or disabled — ignore */ }
+  }
+
+  return result;
 }
 
 export async function getRecommendations(tmdbId) {

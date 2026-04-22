@@ -6,7 +6,7 @@ import EmptyArchives from '../../assets/images/arcy-scenes/empty-archives.png'
 import NoComms from '../../assets/images/arcy-scenes/no-comms.png'
 
 const SCENES = {
-  theater:    { src: ArcyTheater,     overlay: true  },
+  theater:    { src: ArcyTheater,     overlay: false },
   window:     { src: ArcyWindow,      overlay: true  },
   lost:       { src: ArcyLost,        overlay: false },
   projector:  { src: BrokenProjector, overlay: false },

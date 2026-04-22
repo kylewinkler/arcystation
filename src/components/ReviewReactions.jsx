@@ -1,19 +1,18 @@
-import { useState } from 'react';
 import { setReviewReaction } from '../lib/firestore';
 
 export default function ReviewReactions({
   reviewerUid,
   tmdbId,
-  reactions: initialReactions = {},
+  reactions = {},
   currentUserUid,
   movieTitle,
   posterPath,
+  onReactionChange,
 }) {
-  const [reactions, setReactions] = useState(initialReactions);
+  const upCount = Object.values(reactions).filter((r) => r === 'up').length;
+  const downCount = Object.values(reactions).filter((r) => r === 'down').length;
 
   if (!currentUserUid || currentUserUid === reviewerUid) {
-    const upCount = Object.values(reactions).filter((r) => r === 'up').length;
-    const downCount = Object.values(reactions).filter((r) => r === 'down').length;
     if (upCount === 0 && downCount === 0) return null;
     return (
       <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
@@ -24,19 +23,17 @@ export default function ReviewReactions({
   }
 
   const myReaction = reactions[currentUserUid];
-  const upCount = Object.values(reactions).filter((r) => r === 'up').length;
-  const downCount = Object.values(reactions).filter((r) => r === 'down').length;
 
   async function react(type) {
     const next = myReaction === type ? null : type;
     const optimistic = { ...reactions };
     if (next === null) delete optimistic[currentUserUid];
     else optimistic[currentUserUid] = next;
-    setReactions(optimistic);
+    onReactionChange?.(optimistic);
     try {
       await setReviewReaction(reviewerUid, tmdbId, currentUserUid, next, { movieTitle, posterPath });
     } catch {
-      setReactions(reactions);
+      onReactionChange?.(reactions);
     }
   }
 

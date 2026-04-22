@@ -338,12 +338,12 @@ export default function ListDetail() {
   const myStarter = starters.find((s) => s.uid === user.uid);
   const allWatcherTiles = [];
 
-  // Self tile
+  // Self tile — use live myWatched count so it updates optimistically on mark/unmark
   if (myStarter && myProfile) {
     allWatcherTiles.push({
       uid: user.uid,
       profile: myProfile,
-      progress: myStarter,
+      progress: { ...myStarter, watchedCount: Object.keys(myWatched).length },
       isSelf: true,
       isActive: isViewingSelf,
       link: `/lists/${id}`,

@@ -10,6 +10,7 @@ import LoadingScreen from '../components/loading/Loading';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, PIN_REACTIONS, FIRST_PIN } from '../lib/copy/lore';
 import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
+import EmptyArchives from '../assets/images/arcy-scenes/empty-archives.png';
 
 const PAGE_SIZE = 10;
 
@@ -175,7 +176,13 @@ export default function Lists() {
 
       {/* List grid */}
       {paginated.length === 0 ? (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
+        <div className="text-center">
+          <img
+            src={EmptyArchives}
+            alt=""
+            className="mx-auto mb-4 w-full max-w-md select-none"
+            draggable="false"
+          />
           <p className="text-gray-400">
             {tab === 'created'
               ? "You haven't created any lists yet."

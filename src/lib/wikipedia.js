@@ -10,6 +10,21 @@ async function wikiFetch(params) {
   return res.json();
 }
 
+function normTitle(s) {
+  return s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function pickBestHit(hits, title) {
+  const target = normTitle(title);
+  const exact = hits.find((h) => normTitle(h.title) === target);
+  if (exact) return exact;
+  const filmSuffix = hits.find((h) => /\(\d{4} film\)$|\(film\)$/i.test(h.title));
+  if (filmSuffix) return filmSuffix;
+  const starts = hits.find((h) => normTitle(h.title).startsWith(target));
+  if (starts) return starts;
+  return null;
+}
+
 async function searchFilmPage(title, year) {
   const queries = [
     year ? `"${title}" ${year} film` : null,
@@ -20,8 +35,8 @@ async function searchFilmPage(title, year) {
   for (const q of queries) {
     const data = await wikiFetch({ action: 'query', list: 'search', srsearch: q, srlimit: 5 });
     const hits = data?.query?.search || [];
-    const filmHit = hits.find((h) => /film\)?$/i.test(h.title)) || hits[0];
-    if (filmHit) return filmHit.title;
+    const best = pickBestHit(hits, title);
+    if (best) return best.title;
   }
   return null;
 }

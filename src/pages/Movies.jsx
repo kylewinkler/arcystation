@@ -122,6 +122,10 @@ export default function Movies() {
     if (!didRestore && section === 'discover') {
       loadDiscover(1, false);
     }
+    // Reset on cleanup so Strict Mode's simulated unmount/remount doesn't
+    // leave the ref "true" and trick the [discoverTab, ...] effect into
+    // firing a fresh fetch that clobbers restored state on back-nav.
+    return () => { mountedRef.current = false; };
   }, []);
 
   // ── Save discover state to sessionStorage ──

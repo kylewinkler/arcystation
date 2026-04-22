@@ -5,12 +5,13 @@ import {
   getUserAllProgress, getList, getUserProfile, getListMovies, getWatchedMovies,
   getPinnedLists,
   getPendingListInvites, acceptListInvite, declineListInvite,
-  getAllWatchedTmdbIds,
+  getAllWatchedTmdbIds, reconcileUserWatchedCounts,
 } from '../lib/firestore';
 import { discoverMovies, posterUrl } from '../lib/tmdb';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import LoadingScreen from '../components/loading/Loading';
+import NoComms from '../assets/images/arcy-scenes/no-comms.png';
 
 function pickRandom(arr) {
   return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
@@ -53,11 +54,26 @@ export default function Home() {
 
   async function load() {
     setLoading(true);
-    const [allProgress, pinned, pendingInvites] = await Promise.all([
+
+    // One-time per session: heal any watchedCount corruption from the earlier
+    // increment-on-missing-field bug. Runs before getUserAllProgress so the
+    // rest of the load sees corrected data.
+    if (!sessionStorage.getItem('watchedCountReconciledV1')) {
+      try {
+        await reconcileUserWatchedCounts(user.uid);
+        sessionStorage.setItem('watchedCountReconciledV1', '1');
+      } catch { /* non-fatal — let the rest of load proceed */ }
+    }
+
+    const [allProgress, pinned, pendingInvites, popResult, ids] = await Promise.all([
       getUserAllProgress(user.uid),
       getPinnedLists(user.uid),
       getPendingListInvites(user.uid),
+      discoverMovies({ tab: 'popular' }),
+      getAllWatchedTmdbIds(user.uid),
     ]);
+    setPopularMovies(popResult.movies.slice(0, 10));
+    setWatchedIds(ids);
 
     const enrichedInvites = await Promise.all(
       pendingInvites.map(async (inv) => {
@@ -84,12 +100,6 @@ export default function Home() {
     setHasLists(valid.length > 0);
 
     if (valid.length === 0) {
-      const [popResult, ids] = await Promise.all([
-        discoverMovies({ tab: 'popular' }),
-        getAllWatchedTmdbIds(user.uid),
-      ]);
-      setPopularMovies(popResult.movies.slice(0, 10));
-      setWatchedIds(ids);
       setLoading(false);
       return;
     }
@@ -116,16 +126,30 @@ export default function Home() {
       })
     );
 
-    // Continue watching: most-recent activity on a pinned list (fallback: any)
+    // Continue watching: most-recent activity on a pinned list, falling back
+    // to any other list by recency. Walk candidates in priority order and
+    // pick the first one that actually has a released-unwatched movie — a
+    // pinned list with no viable pick should yield to the next candidate,
+    // not silently hide the tile.
     const byRecent = [...allIncomplete].sort(
       (a, b) => (b.lastActivityAt?.seconds || 0) - (a.lastActivityAt?.seconds || 0)
     );
     const pinnedIncomplete = byRecent.filter((item) => pinnedSet.has(item.listId));
-    const continueList = pinnedIncomplete[0] || byRecent[0];
-    const continueUnwatched = (movieData[continueList.listId] || [])
-      .filter((m) => !watchedData[continueList.listId]?.[m.tmdbId])
-      .filter(isReleased);
-    const continueMovie = pickRandom(continueUnwatched);
+    const unpinnedIncomplete = byRecent.filter((item) => !pinnedSet.has(item.listId));
+    const candidates = [...pinnedIncomplete, ...unpinnedIncomplete];
+
+    let continueList = null;
+    let continueMovie = null;
+    for (const cand of candidates) {
+      const unwatched = (movieData[cand.listId] || [])
+        .filter((m) => !watchedData[cand.listId]?.[m.tmdbId])
+        .filter(isReleased);
+      if (unwatched.length > 0) {
+        continueList = cand;
+        continueMovie = pickRandom(unwatched);
+        break;
+      }
+    }
     if (continueMovie) {
       setContinueItem({
         movie: continueMovie,
@@ -187,6 +211,36 @@ export default function Home() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {/* Popular movies — always at top */}
+      {popularMovies.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-white">Popular Right Now</h2>
+            <Link to="/movies" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            {popularMovies.slice(0, 5).map((m) => (
+              <button
+                key={m.tmdbId}
+                onClick={() => setQuickActionMovie(m)}
+                className="group text-left"
+              >
+                {m.posterPath ? (
+                  <img
+                    src={posterUrl(m.posterPath, 'w185')}
+                    alt=""
+                    className="w-full aspect-[2/3] rounded-lg object-cover group-hover:ring-2 ring-purple-500 transition-all"
+                  />
+                ) : (
+                  <div className="w-full aspect-[2/3] rounded-lg bg-gray-800" />
+                )}
+                <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{m.title}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
     {/* Pending invites — top, urgent */}
       {invites.length > 0 && (
         <div className="space-y-2">
@@ -291,7 +345,13 @@ export default function Home() {
       {/* Empty state — no lists at all */}
       {!hasLists && (
         <div className="space-y-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+          <div className="text-center">
+            <img
+              src={NoComms}
+              alt=""
+              className="mx-auto mb-4 w-full max-w-md select-none"
+              draggable="false"
+            />
             <p className="text-white font-medium mb-1">Your station is quiet.</p>
             <p className="text-gray-400 text-sm mb-4">
               Start a list of movies to track, or join a friend's.

@@ -3,14 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { posterUrl } from '../lib/tmdb';
 import {
-  getUserAllProgress, getListMovies, getWatchedMovies, getList,
+  getUserAllProgress, getListMovies, getList,
   getUserLists, addMovieToList, removeMovieFromList, createList, startList,
   markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
   getAllWatchedTmdbIds, notifyFriends, getFriendReviewsForMovie,
   getMoviePlot, saveMoviePlot,
 } from '../lib/firestore';
 import { fetchWikipediaPlot } from '../lib/wikipedia';
-import StarRating from '../components/StarRating';
 import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -29,7 +28,6 @@ export default function MovieDetail() {
   const [fullDetails, setFullDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [myLists, setMyLists] = useState([]); // lists I'm on that contain this movie
-  const [watchedInfo, setWatchedInfo] = useState(null); // { watchedAt, rating, note } or null
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [ownedLists, setOwnedLists] = useState([]); // lists I created
   const [movieOnLists, setMovieOnLists] = useState(new Set()); // listIds that have this movie
@@ -73,6 +71,7 @@ export default function MovieDetail() {
         tmdbId: String(data.id),
         title: data.title,
         year: data.release_date ? data.release_date.slice(0, 4) : '',
+        releaseDate: data.release_date || '',
         posterPath: data.poster_path,
         overview: data.overview,
       });
@@ -122,6 +121,7 @@ export default function MovieDetail() {
         title: movie.title,
         posterPath: movie.posterPath,
         year: movie.year,
+        releaseDate: movie.releaseDate || '',
         overview: movie.overview || '',
         genreIds: fullDetails?.genres?.map((g) => g.id) || [],
       };
@@ -144,6 +144,7 @@ export default function MovieDetail() {
         title: movie.title,
         posterPath: movie.posterPath,
         year: movie.year,
+        releaseDate: movie.releaseDate || '',
         overview: movie.overview || '',
         genreIds: fullDetails?.genres?.map((g) => g.id) || [],
       };
@@ -162,42 +163,33 @@ export default function MovieDetail() {
 
   async function loadUserData() {
     try {
-      const allProgress = await getUserAllProgress(user.uid);
-      const listsWithMovie = [];
-      let foundWatched = null;
+      const [allProgress, standalone] = await Promise.all([
+        getUserAllProgress(user.uid),
+        getWatchedInfo(user.uid, tmdbId),
+      ]);
+      setStandaloneWatched(standalone);
 
+      const listsWithMovie = [];
       await Promise.all(
         allProgress.map(async (p) => {
-          const [movies, watched, listDoc] = await Promise.all([
+          const [movies, listDoc] = await Promise.all([
             getListMovies(p.listId),
-            getWatchedMovies(user.uid, p.listId),
             getList(p.listId),
           ]);
-          const hasMovie = movies.some((m) => m.tmdbId === tmdbId);
-          if (hasMovie && listDoc) {
+          if (movies.some((m) => m.tmdbId === tmdbId) && listDoc) {
             listsWithMovie.push({ list: listDoc, progress: p });
-            // Check if watched on this list
-            if (watched[tmdbId] && !foundWatched) {
-              foundWatched = watched[tmdbId];
-            }
           }
         })
       );
-
       setMyLists(listsWithMovie);
-      setWatchedInfo(foundWatched);
-
-      // Also check standalone watched info
-      const standalone = await getWatchedInfo(user.uid, tmdbId);
-      setStandaloneWatched(standalone);
     } catch (err) {
       console.error('Failed to load user data:', err);
     }
   }
 
-  const isWatched = !!watchedInfo || !!standaloneWatched;
-  const displayRating = watchedInfo?.rating || standaloneWatched?.rating;
-  const displayNote = watchedInfo?.note || standaloneWatched?.note;
+  const isWatched = !!standaloneWatched;
+  const displayRating = standaloneWatched?.rating;
+  const displayNote = standaloneWatched?.note;
 
   function getMovieData() {
     return {
@@ -222,6 +214,16 @@ export default function MovieDetail() {
     }
   }
 
+  function isPlotFresh(data, year) {
+    if (!data?.fetchedAt) return false;
+    const fetchedMs = data.fetchedAt.toMillis?.() ?? new Date(data.fetchedAt).getTime();
+    if (!fetchedMs) return false;
+    const ageDays = (Date.now() - fetchedMs) / (1000 * 60 * 60 * 24);
+    const currentYear = new Date().getFullYear();
+    const isRecent = !year || Number(year) >= currentYear - 1;
+    return ageDays < (isRecent ? 7 : 90);
+  }
+
   async function handleTogglePlot() {
     if (plotOpen) {
       setPlotOpen(false);
@@ -233,7 +235,7 @@ export default function MovieDetail() {
     setPlotLoading(true);
     try {
       let data = await getMoviePlot(tmdbId);
-      if (!data) {
+      if (!data || !isPlotFresh(data, movie.year)) {
         data = await fetchWikipediaPlot(movie.title, movie.year);
         await saveMoviePlot(tmdbId, data).catch(() => {});
       }
@@ -287,10 +289,10 @@ export default function MovieDetail() {
           <img
             src={posterUrl(movie.posterPath, 'w342')}
             alt=""
-            className="w-40 h-60 rounded-lg object-cover shrink-0"
+            className={`w-40 h-60 rounded-lg object-cover shrink-0 ${isWatched ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`}
           />
         ) : (
-          <div className="w-40 h-60 rounded-lg bg-gray-800 shrink-0 flex items-center justify-center text-gray-600">
+          <div className={`w-40 h-60 rounded-lg bg-gray-800 shrink-0 flex items-center justify-center text-gray-600 ${isWatched ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`}>
             No poster
           </div>
         )}
@@ -380,42 +382,31 @@ export default function MovieDetail() {
         )}
       </div>
 
-      {friendReviews.length > 0 && (
-        <FriendReviewsCarousel
-          reviews={friendReviews}
-          movieTitle={movie.title}
-          posterPath={movie.posterPath}
-        />
-      )}
+      {(() => {
+        const myReview = standaloneWatched;
+        const allReviews = [
+          ...(myReview && user ? [{
+            review: { ...myReview, tmdbId: String(tmdbId) },
+            profile: { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
+          }] : []),
+          ...friendReviews.filter((r) => r.profile.uid !== user?.uid),
+        ];
+        if (allReviews.length === 0) return null;
+        return (
+          <FriendReviewsCarousel
+            reviews={allReviews}
+            movieTitle={movie.title}
+            posterPath={movie.posterPath}
+            onOwnReviewClick={() => {
+              setRating(displayRating || 0);
+              setNote(displayNote || '');
+              setRatingModal(true);
+            }}
+          />
+        );
+      })()}
 
-      {/* Watched status + review */}
-      {isWatched && (
-        <button
-          onClick={() => {
-            setRating(displayRating || 0);
-            setNote(displayNote || '');
-            setRatingModal(true);
-          }}
-          className="w-full bg-purple-600/10 border border-purple-500/30 rounded-lg p-4 text-left hover:border-purple-500 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <span className="text-purple-300 text-sm font-medium">Watched</span>
-            {displayRating > 0 && (
-              <span className="ml-auto"><StarRating value={displayRating} size="sm" /></span>
-            )}
-          </div>
-          {displayNote && (
-            <p className="text-gray-300 text-sm mt-2 italic">"{displayNote}"</p>
-          )}
-        </button>
-      )}
 
-      
       {/* Lists I'm on that have this movie */}
       {myLists.length > 0 && (
         <div>

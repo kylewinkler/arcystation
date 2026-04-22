@@ -5,6 +5,16 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+// ── In-memory caches (per browser session) ──
+// Invalidate on mutations; real-time subscriptions also refresh them.
+const listCache = new Map();
+const listMoviesCache = new Map();
+
+function invalidateListCache(listId) {
+  listCache.delete(listId);
+  listMoviesCache.delete(listId);
+}
+
 // ── ID helpers ──
 
 function memberDocId(uid, listId) {
@@ -70,8 +80,11 @@ export async function copyList(sourceListId, newOwnerId) {
 }
 
 export async function getList(listId) {
+  if (listCache.has(listId)) return listCache.get(listId);
   const snap = await getDoc(doc(db, 'lists', listId));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  const data = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  listCache.set(listId, data);
+  return data;
 }
 
 export async function getPrebuiltLists() {
@@ -88,6 +101,7 @@ export async function updateList(listId, data) {
     ...data,
     updatedAt: serverTimestamp(),
   });
+  invalidateListCache(listId);
 }
 
 export async function setFeaturedMovie(listId, movie) {
@@ -98,6 +112,7 @@ export async function setFeaturedMovie(listId, movie) {
   } else {
     await updateDoc(doc(db, 'lists', listId), { featuredMovie: deleteField() });
   }
+  invalidateListCache(listId);
 }
 
 export async function deleteList(listId) {
@@ -121,11 +136,14 @@ export async function deleteList(listId) {
     watchedSnap.docs.forEach((d) => wBatch.delete(d.ref));
     await wBatch.commit();
   }
+  invalidateListCache(listId);
 }
 
 export function subscribeToList(listId, callback) {
   return onSnapshot(doc(db, 'lists', listId), (snap) => {
-    callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    const data = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+    listCache.set(listId, data);
+    callback(data);
   });
 }
 
@@ -161,6 +179,7 @@ export async function addMovieToList(listId, movie) {
     updates.firstPoster = movie.posterPath;
   }
   await updateDoc(doc(db, 'lists', listId), updates);
+  invalidateListCache(listId);
 }
 
 export async function removeMovieFromList(listId, tmdbId) {
@@ -169,15 +188,19 @@ export async function removeMovieFromList(listId, tmdbId) {
     movieCount: increment(-1),
     updatedAt: serverTimestamp(),
   });
+  invalidateListCache(listId);
 }
 
 export async function getListMovies(listId) {
+  if (listMoviesCache.has(listId)) return listMoviesCache.get(listId);
   const q = query(
     collection(db, 'lists', listId, 'movies'),
     orderBy('order')
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ tmdbId: d.id, ...d.data() }));
+  const movies = snap.docs.map((d) => ({ tmdbId: d.id, ...d.data() }));
+  listMoviesCache.set(listId, movies);
+  return movies;
 }
 
 export function subscribeToListMovies(listId, callback) {
@@ -186,7 +209,9 @@ export function subscribeToListMovies(listId, callback) {
     orderBy('order')
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ tmdbId: d.id, ...d.data() })));
+    const movies = snap.docs.map((d) => ({ tmdbId: d.id, ...d.data() }));
+    listMoviesCache.set(listId, movies);
+    callback(movies);
   });
 }
 
@@ -194,9 +219,16 @@ export function subscribeToListMovies(listId, callback) {
 
 export async function startList(uid, listId) {
   const docId = memberDocId(uid, listId);
-  await setDoc(doc(db, 'listMembers', docId), {
+  const ref = doc(db, 'listMembers', docId);
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    await updateDoc(ref, { lastActivityAt: serverTimestamp() });
+    return;
+  }
+  await setDoc(ref, {
     uid,
     listId,
+    watchedCount: 0,
     joinedAt: serverTimestamp(),
     lastActivityAt: serverTimestamp(),
   });
@@ -213,6 +245,18 @@ export function subscribeToProgress(uid, listId, callback) {
   });
 }
 
+// Lazy backfill: count watched docs + write back to member doc so future reads are free.
+async function backfillWatchedCount(member) {
+  const watchedSnap = await getDocs(query(
+    collection(db, 'listWatched'),
+    where('uid', '==', member.uid),
+    where('listId', '==', member.listId)
+  ));
+  const count = watchedSnap.size;
+  updateDoc(doc(db, 'listMembers', member.id), { watchedCount: count }).catch(() => {});
+  return count;
+}
+
 export async function getUserAllProgress(uid) {
   const q = query(
     collection(db, 'listMembers'),
@@ -221,18 +265,28 @@ export async function getUserAllProgress(uid) {
   const snap = await getDocs(q);
   const members = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-  // Compute watchedCount for each membership
-  const enriched = await Promise.all(
-    members.map(async (m) => {
-      const watchedSnap = await getDocs(query(
-        collection(db, 'listWatched'),
-        where('uid', '==', uid),
-        where('listId', '==', m.listId)
-      ));
-      return { ...m, watchedCount: watchedSnap.size };
-    })
-  );
-  return enriched;
+  return Promise.all(members.map(async (m) => {
+    if (m.watchedCount !== undefined) return m;
+    return { ...m, watchedCount: await backfillWatchedCount(m) };
+  }));
+}
+
+// One-time heal for users whose watchedCount fields were corrupted by the
+// earlier increment-on-missing-field bug. Called once per session from Home.
+export async function reconcileUserWatchedCounts(uid) {
+  const q = query(collection(db, 'listMembers'), where('uid', '==', uid));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(async (d) => {
+    const { listId } = d.data();
+    const watchedSnap = await getDocs(query(
+      collection(db, 'listWatched'),
+      where('uid', '==', uid),
+      where('listId', '==', listId)
+    ));
+    if (d.data().watchedCount !== watchedSnap.size) {
+      await updateDoc(d.ref, { watchedCount: watchedSnap.size });
+    }
+  }));
 }
 
 export async function getListStarters(listId) {
@@ -243,43 +297,46 @@ export async function getListStarters(listId) {
   const snap = await getDocs(q);
   const members = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-  // Compute watchedCount for each member
-  const enriched = await Promise.all(
-    members.map(async (m) => {
-      const watchedSnap = await getDocs(query(
-        collection(db, 'listWatched'),
-        where('uid', '==', m.uid),
-        where('listId', '==', listId)
-      ));
-      return { ...m, watchedCount: watchedSnap.size };
-    })
-  );
-  return enriched;
+  return Promise.all(members.map(async (m) => {
+    if (m.watchedCount !== undefined) return m;
+    return { ...m, watchedCount: await backfillWatchedCount(m) };
+  }));
 }
 
 // ── Per-list Watched ──
 
+// Recount from source of truth and write to listMembers doc.
+// Called after any mutation that changes watched state so the denormalized
+// count always matches reality — even if the field was missing or corrupted
+// by a prior increment-on-missing-field.
+async function syncWatchedCount(uid, listId, extraMemberUpdates = {}) {
+  const watchedSnap = await getDocs(query(
+    collection(db, 'listWatched'),
+    where('uid', '==', uid),
+    where('listId', '==', listId)
+  ));
+  await updateDoc(doc(db, 'listMembers', memberDocId(uid, listId)), {
+    ...extraMemberUpdates,
+    watchedCount: watchedSnap.size,
+  });
+}
+
 export async function markWatched(uid, listId, tmdbId, { rating, note, movieData } = {}) {
-  const docId = watchedDocId(uid, listId, tmdbId);
-  await setDoc(doc(db, 'listWatched', docId), {
+  const watchedRef = doc(db, 'listWatched', watchedDocId(uid, listId, tmdbId));
+  await setDoc(watchedRef, {
     uid,
     listId,
     tmdbId,
     watchedAt: serverTimestamp(),
   });
-  // Update lastActivityAt on membership
-  await updateDoc(doc(db, 'listMembers', memberDocId(uid, listId)), {
-    lastActivityAt: serverTimestamp(),
-  });
-  // Global review
+  await syncWatchedCount(uid, listId, { lastActivityAt: serverTimestamp() });
   await markWatchedStandalone(uid, tmdbId, { rating, note, movieData });
 }
 
 export async function bulkMarkWatchedFromReviews(uid, listId, tmdbIds) {
   const batch = writeBatch(db);
   for (const tmdbId of tmdbIds) {
-    const docId = watchedDocId(uid, listId, tmdbId);
-    batch.set(doc(db, 'listWatched', docId), {
+    batch.set(doc(db, 'listWatched', watchedDocId(uid, listId, tmdbId)), {
       uid,
       listId,
       tmdbId,
@@ -287,14 +344,15 @@ export async function bulkMarkWatchedFromReviews(uid, listId, tmdbIds) {
     });
   }
   await batch.commit();
-  await updateDoc(doc(db, 'listMembers', memberDocId(uid, listId)), {
-    lastActivityAt: serverTimestamp(),
-  });
+  await syncWatchedCount(uid, listId, { lastActivityAt: serverTimestamp() });
 }
 
 export async function unmarkWatched(uid, listId, tmdbId) {
-  const docId = watchedDocId(uid, listId, tmdbId);
-  await deleteDoc(doc(db, 'listWatched', docId));
+  const watchedRef = doc(db, 'listWatched', watchedDocId(uid, listId, tmdbId));
+  const existing = await getDoc(watchedRef);
+  if (!existing.exists()) return;
+  await deleteDoc(watchedRef);
+  await syncWatchedCount(uid, listId);
   // Don't touch review — it stays
 }
 
@@ -356,6 +414,22 @@ export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieDa
 export async function unmarkWatchedStandalone(uid, tmdbId) {
   const docId = reviewDocId(uid, tmdbId);
   await deleteDoc(doc(db, 'reviews', docId));
+
+  // Cascade: remove per-list watched entries so lists don't keep checking the movie.
+  const snap = await getDocs(query(
+    collection(db, 'listWatched'),
+    where('uid', '==', uid),
+    where('tmdbId', '==', tmdbId)
+  ));
+  if (snap.empty) return;
+  const affectedListIds = new Set();
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => {
+    batch.delete(d.ref);
+    affectedListIds.add(d.data().listId);
+  });
+  await batch.commit();
+  await Promise.all([...affectedListIds].map((listId) => syncWatchedCount(uid, listId)));
 }
 
 export async function getWatchedInfo(uid, tmdbId) {
@@ -633,6 +707,7 @@ export async function enablePublicShare(listId) {
     shareSlug: slug,
     updatedAt: serverTimestamp(),
   });
+  invalidateListCache(listId);
   return slug;
 }
 
@@ -642,6 +717,7 @@ export async function disablePublicShare(listId) {
     shareSlug: null,
     updatedAt: serverTimestamp(),
   });
+  invalidateListCache(listId);
 }
 
 export async function getListBySlug(slug) {

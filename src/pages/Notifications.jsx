@@ -87,6 +87,12 @@ export default function Notifications() {
               items={g.items}
               currentUserUid={user.uid}
               reactionsByReview={reactionsByReview}
+              onReactionChange={(reviewerUid, tmdbId, newReactions) => {
+                setReactionsByReview((prev) => ({
+                  ...prev,
+                  [`${reviewerUid}__${tmdbId}`]: newReactions,
+                }));
+              }}
             />
           ))}
         </div>

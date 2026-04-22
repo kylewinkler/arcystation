@@ -31,7 +31,7 @@ export const DISCOVER_NO_RESULTS = {
 export const PROFILE_NO_WATCHED = {
   title: 'No signals received yet.',
   subtitle: 'Arcy listens, but the frequencies are silent.',
-  scene: 'comms',
+  scene: 'projector',
 };
 
 // Profile — no lists
@@ -45,7 +45,7 @@ export const PROFILE_NO_LISTS = {
 export const FRIENDS_NONE = {
   title: 'Arcy is alone on the station.',
   subtitle: 'Search by name to find someone out there.',
-  scene: 'comms',
+  scene: 'theater',
 };
 
 // Friends page — search returns nothing

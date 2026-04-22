@@ -38,7 +38,7 @@ export function groupActivity(notifications) {
   return groups;
 }
 
-function WatchedMovieEntry({ item, currentUserUid, reactions }) {
+function WatchedMovieEntry({ item, currentUserUid, reactions, onReactionChange }) {
   const { data, fromUid } = item;
   const inner = (
     <div className="flex gap-3">
@@ -72,6 +72,7 @@ function WatchedMovieEntry({ item, currentUserUid, reactions }) {
             currentUserUid={currentUserUid}
             movieTitle={data.movieTitle}
             posterPath={data.posterPath}
+            onReactionChange={(newReactions) => onReactionChange?.(fromUid, String(data.tmdbId), newReactions)}
           />
         )}
       </div>
@@ -84,7 +85,7 @@ function WatchedMovieEntry({ item, currentUserUid, reactions }) {
   ) : inner;
 }
 
-export default function NotificationItem({ notification, profile, onFriendAction, extraCount = 0, items = null, currentUserUid, reactionsByReview = {} }) {
+export default function NotificationItem({ notification, profile, onFriendAction, extraCount = 0, items = null, currentUserUid, reactionsByReview = {}, onReactionChange }) {
   const { type, data } = notification;
   const reviewKey = data?.tmdbId ? `${notification.fromUid}__${data.tmdbId}` : null;
   const reactions = reviewKey ? reactionsByReview[reviewKey] : null;
@@ -260,6 +261,7 @@ export default function NotificationItem({ notification, profile, onFriendAction
             currentUserUid={currentUserUid}
             movieTitle={data.movieTitle}
             posterPath={data.posterPath}
+            onReactionChange={(newReactions) => onReactionChange?.(notification.fromUid, String(data.tmdbId), newReactions)}
           />
         )}
         <p className="text-xs text-gray-600 mt-1">{timeAgo(notification.createdAt?.seconds)}</p>
@@ -310,6 +312,7 @@ export default function NotificationItem({ notification, profile, onFriendAction
                   item={it}
                   currentUserUid={currentUserUid}
                   reactions={k ? reactionsByReview[k] : null}
+                  onReactionChange={onReactionChange}
                 />
               );
             })}
