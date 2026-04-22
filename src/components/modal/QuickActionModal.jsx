@@ -107,6 +107,8 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       movieTitle: movie?.title || null,
       tmdbId: movie?.tmdbId || movie?.id || null,
       posterPath: movie?.poster_path || movie?.posterPath || null,
+      rating: rating || null,
+      note: note.trim() || null,
     });
   }
 

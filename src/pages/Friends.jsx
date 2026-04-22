@@ -8,7 +8,7 @@ import {
 } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
-import NotificationItem from '../components/notifications/NotificationItem';
+import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 import { FRIENDS_NONE, FRIENDS_NO_RESULTS } from '../lib/copy/empty';
 
 const FEED_TYPES = new Set([
@@ -258,11 +258,13 @@ export default function Friends() {
           </div>
         ) : (
           <div className="space-y-2">
-            {feed.map((n) => (
+            {groupActivity(feed).map((g) => (
               <NotificationItem
-                key={n.id}
-                notification={n}
-                profile={feedProfiles[n.fromUid]}
+                key={g.items[0].id}
+                notification={g.items[0]}
+                profile={feedProfiles[g.fromUid]}
+                extraCount={g.items.length - 1}
+                items={g.items}
               />
             ))}
           </div>

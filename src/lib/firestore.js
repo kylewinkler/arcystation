@@ -373,6 +373,38 @@ export async function getWatchedMoviesByYear(uid, year) {
   return all.filter((m) => String(m.year) === String(year));
 }
 
+export async function getFriendReviewsForMovie(uid, tmdbId) {
+  const friendUids = await getFriends(uid);
+  if (friendUids.length === 0) return [];
+
+  const chunks = [];
+  for (let i = 0; i < friendUids.length; i += 30) {
+    chunks.push(friendUids.slice(i, i + 30));
+  }
+
+  const snaps = await Promise.all(
+    chunks.map((chunk) =>
+      getDocs(
+        query(
+          collection(db, 'reviews'),
+          where('tmdbId', '==', String(tmdbId)),
+          where('uid', 'in', chunk)
+        )
+      )
+    )
+  );
+
+  const reviews = [];
+  snaps.forEach((snap) => snap.docs.forEach((d) => reviews.push(d.data())));
+  if (reviews.length === 0) return [];
+
+  const profiles = await Promise.all(reviews.map((r) => getUserProfile(r.uid)));
+  return reviews
+    .map((review, i) => ({ review, profile: profiles[i] }))
+    .filter((r) => r.profile)
+    .sort((a, b) => (b.review.watchedAt?.seconds || 0) - (a.review.watchedAt?.seconds || 0));
+}
+
 // ── Friendships ──
 
 function friendshipId(uid1, uid2) {

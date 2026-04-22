@@ -187,6 +187,7 @@ export default function Home() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      sdf
       {/* Pending invites — top, urgent */}
       {invites.length > 0 && (
         <div className="space-y-2">
@@ -311,35 +312,6 @@ export default function Home() {
               </Link>
             </div>
           </div>
-
-          {popularMovies.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold text-white">Popular Right Now</h2>
-                <Link to="/movies" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
-              </div>
-              <div className="grid grid-cols-5 gap-2">
-                {popularMovies.slice(0, 5).map((m) => (
-                  <button
-                    key={m.tmdbId}
-                    onClick={() => setQuickActionMovie(m)}
-                    className="group text-left"
-                  >
-                    {m.posterPath ? (
-                      <img
-                        src={posterUrl(m.posterPath, 'w185')}
-                        alt=""
-                        className="w-full aspect-[2/3] rounded-lg object-cover group-hover:ring-2 ring-purple-500 transition-all"
-                      />
-                    ) : (
-                      <div className="w-full aspect-[2/3] rounded-lg bg-gray-800" />
-                    )}
-                    <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{m.title}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

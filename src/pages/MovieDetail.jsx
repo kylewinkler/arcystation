@@ -6,7 +6,7 @@ import {
   getUserAllProgress, getListMovies, getWatchedMovies, getList,
   getUserLists, addMovieToList, removeMovieFromList, createList, startList,
   markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
-  getAllWatchedTmdbIds, notifyFriends,
+  getAllWatchedTmdbIds, notifyFriends, getFriendReviewsForMovie,
 } from '../lib/firestore';
 import StarRating from '../components/StarRating';
 import BackButton from '../components/BackButton';
@@ -17,6 +17,7 @@ import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
 import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
 import RatingModal from '../components/modal/RatingModal';
+import FriendReviewsCarousel from '../components/FriendReviewsCarousel';
 
 export default function MovieDetail() {
   const { tmdbId } = useParams();
@@ -36,6 +37,7 @@ export default function MovieDetail() {
   const [ratingModal, setRatingModal] = useState(false);
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
+  const [friendReviews, setFriendReviews] = useState([]);
   const addMenuRef = useRef(null);
   const { showToast } = useToast();
 
@@ -45,6 +47,11 @@ export default function MovieDetail() {
 
   useEffect(() => {
     if (user && tmdbId) loadUserData();
+  }, [user, tmdbId]);
+
+  useEffect(() => {
+    if (!user || !tmdbId) return;
+    getFriendReviewsForMovie(user.uid, tmdbId).then(setFriendReviews).catch(() => {});
   }, [user, tmdbId]);
 
   async function loadMovie() {
@@ -221,6 +228,8 @@ export default function MovieDetail() {
       movieTitle: movie?.title || null,
       tmdbId: Number(tmdbId) || null,
       posterPath: movie?.poster_path || movie?.posterPath || null,
+      rating: rating || null,
+      note: note.trim() || null,
     });
   }
 
@@ -288,7 +297,10 @@ export default function MovieDetail() {
         <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
       )}
 
-      
+      {friendReviews.length > 0 && (
+        <FriendReviewsCarousel reviews={friendReviews} />
+      )}
+
       {/* Watched status + review */}
       {isWatched && (
         <button

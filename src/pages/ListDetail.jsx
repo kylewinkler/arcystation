@@ -298,6 +298,8 @@ export default function ListDetail() {
       posterPath: movie?.posterPath || null,
       listTitle: list?.title || null,
       listId: id,
+      rating: rating || null,
+      note: note.trim() || null,
     });
 
     // Check if user just finished the list

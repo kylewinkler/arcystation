@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getNotifications, markAllNotificationsRead, getUserProfile, acceptFriendRequest, removeFriend, deleteNotification } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
-import NotificationItem from '../components/notifications/NotificationItem';
+import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 
 export default function Notifications() {
   const { user } = useAuth();
@@ -60,12 +60,14 @@ export default function Notifications() {
         </div>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => (
+          {groupActivity(notifications).map((g) => (
             <NotificationItem
-              key={n.id}
-              notification={n}
-              profile={profiles[n.fromUid]}
+              key={g.items[0].id}
+              notification={g.items[0]}
+              profile={profiles[g.fromUid]}
               onFriendAction={handleFriendAction}
+              extraCount={g.items.length - 1}
+              items={g.items}
             />
           ))}
         </div>

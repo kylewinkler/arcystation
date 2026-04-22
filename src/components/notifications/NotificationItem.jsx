@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { posterUrl } from '../../lib/tmdb';
+import StarRating from '../StarRating';
 
 export function timeAgo(seconds) {
   if (!seconds) return '';
@@ -15,15 +17,81 @@ export function timeAgo(seconds) {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-export default function NotificationItem({ notification, profile, onFriendAction }) {
+const CONSOLIDATABLE_TYPES = new Set(['watched_movie', 'joined_collection']);
+
+export function groupActivity(notifications) {
+  const groups = [];
+  for (const n of notifications) {
+    const last = groups[groups.length - 1];
+    if (
+      last &&
+      CONSOLIDATABLE_TYPES.has(n.type) &&
+      last.type === n.type &&
+      last.fromUid === n.fromUid
+    ) {
+      last.items.push(n);
+    } else {
+      groups.push({ type: n.type, fromUid: n.fromUid, items: [n] });
+    }
+  }
+  return groups;
+}
+
+function WatchedMovieEntry({ item }) {
+  const { data } = item;
+  const inner = (
+    <div className="flex gap-3">
+      {data.posterPath ? (
+        <img
+          src={posterUrl(data.posterPath, 'w92')}
+          alt=""
+          className="w-10 h-14 rounded object-cover shrink-0"
+        />
+      ) : (
+        <div className="w-10 h-14 rounded bg-gray-800 shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-white font-medium truncate">{data.movieTitle}</p>
+        {data.rating && (
+          <div className="mt-0.5">
+            <StarRating value={data.rating} size="sm" />
+          </div>
+        )}
+        {data.note && (
+          <p className="text-xs text-gray-400 italic line-clamp-2 border-l-2 border-gray-700 pl-2 mt-1">
+            "{data.note}"
+          </p>
+        )}
+        <p className="text-xs text-gray-600 mt-1">{timeAgo(item.createdAt?.seconds)}</p>
+      </div>
+    </div>
+  );
+  return data.tmdbId ? (
+    <Link to={`/movie/${data.tmdbId}`} className="block hover:opacity-80 transition-opacity">
+      {inner}
+    </Link>
+  ) : inner;
+}
+
+export default function NotificationItem({ notification, profile, onFriendAction, extraCount = 0, items = null }) {
   const { type, data } = notification;
+  const isConsolidated = extraCount > 0;
+  const [expanded, setExpanded] = useState(false);
+  const expandable = isConsolidated && type === 'watched_movie' && items && items.length > 1;
 
   let icon, text, link;
 
   switch (type) {
     case 'watched_movie':
       icon = null;
-      text = (
+      text = isConsolidated ? (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' watched '}
+          <span className="text-white font-medium">{data.movieTitle}</span>
+          <span className="text-gray-500"> and {extraCount} more</span>
+        </>
+      ) : (
         <>
           <span className="text-white font-medium">{profile?.displayName}</span>
           {' watched '}
@@ -33,7 +101,8 @@ export default function NotificationItem({ notification, profile, onFriendAction
           )}
         </>
       );
-      link = data.tmdbId ? `/movie/${data.tmdbId}` : null;
+      // Single → friend's profile; consolidated → expand inline (no link, handled below)
+      link = isConsolidated ? null : `/user/${notification.fromUid}`;
       break;
     case 'created_list':
       icon = '📋';
@@ -59,14 +128,23 @@ export default function NotificationItem({ notification, profile, onFriendAction
       break;
     case 'joined_collection':
       icon = '🎬';
-      text = (
+      text = isConsolidated ? (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' started the collection '}
+          <span className="text-white font-medium">{data.listTitle}</span>
+          <span className="text-gray-500"> and {extraCount} more</span>
+        </>
+      ) : (
         <>
           <span className="text-white font-medium">{profile?.displayName}</span>
           {' started the collection '}
           <span className="text-white font-medium">{data.listTitle}</span>
         </>
       );
-      link = data.listId ? `/lists/${data.listId}` : null;
+      link = isConsolidated
+        ? `/user/${notification.fromUid}`
+        : (data.listId ? `/lists/${data.listId}` : null);
       break;
     case 'list_invite':
       icon = '✉️';
@@ -125,10 +203,10 @@ export default function NotificationItem({ notification, profile, onFriendAction
       return null;
   }
 
-  const content = (
+  const header = (
     <div className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
       notification.read ? 'bg-gray-900' : 'bg-gray-900 border border-purple-500/20'
-    }`}>
+    } ${expandable ? 'hover:bg-gray-800' : ''}`}>
       <Link to={`/user/${notification.fromUid}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
         {profile?.photoURL ? (
           <img src={profile.photoURL} alt="" className="w-9 h-9 rounded-full mt-0.5" />
@@ -138,8 +216,18 @@ export default function NotificationItem({ notification, profile, onFriendAction
           </div>
         )}
       </Link>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 text-left">
         <p className="text-sm text-gray-300 leading-snug">{text}</p>
+        {type === 'watched_movie' && !isConsolidated && (data.rating || data.note) && (
+          <div className="mt-1.5 space-y-1">
+            {data.rating && <StarRating value={data.rating} size="sm" />}
+            {data.note && (
+              <p className="text-xs text-gray-400 italic line-clamp-2 border-l-2 border-gray-700 pl-2">
+                "{data.note}"
+              </p>
+            )}
+          </div>
+        )}
         <p className="text-xs text-gray-600 mt-1">{timeAgo(notification.createdAt?.seconds)}</p>
         {type === 'friend_request' && onFriendAction && (
           <div className="flex gap-2 mt-2">
@@ -158,20 +246,51 @@ export default function NotificationItem({ notification, profile, onFriendAction
           </div>
         )}
       </div>
-      {data.posterPath && (
+      {data.posterPath && !expandable && (
         <img
           src={posterUrl(data.posterPath, 'w92')}
           alt=""
           className="w-8 h-12 rounded object-cover shrink-0"
         />
       )}
+      {expandable && (
+        <span className="text-gray-500 text-lg shrink-0 select-none" aria-hidden>
+          {expanded ? '▾' : '▸'}
+        </span>
+      )}
       {icon && <span className="text-lg shrink-0">{icon}</span>}
     </div>
   );
 
+  if (expandable) {
+    return (
+      <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="block w-full text-left"
+        >
+          {header}
+        </button>
+        {expanded && (
+          <div className="border-t border-gray-800 p-3 space-y-3">
+            {items.map((it) => (
+              <WatchedMovieEntry key={it.id} item={it} />
+            ))}
+            <Link
+              to={`/user/${notification.fromUid}`}
+              className="block text-center text-xs text-purple-400 hover:text-purple-300 pt-2 border-t border-gray-800"
+            >
+              Visit {profile?.displayName || 'profile'} →
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return link ? (
     <Link to={link} className="block hover:opacity-80 transition-opacity">
-      {content}
+      {header}
     </Link>
-  ) : content;
+  ) : header;
 }
