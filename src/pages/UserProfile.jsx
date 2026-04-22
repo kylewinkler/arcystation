@@ -12,6 +12,7 @@ import WatchedPoster from '../components/movies/WatchedPoster';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import ProfileHeader from '../components/profile/ProfileHeader';
+import { ADMIN_UIDS } from '../lib/admin';
 import { PROFILE_NO_WATCHED, PROFILE_NO_LISTS, USER_NOT_FOUND } from '../lib/copy/empty';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, PIN_REACTIONS, FIRST_PIN } from '../lib/copy/lore';
@@ -124,7 +125,7 @@ export default function UserProfile() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <ProfileHeader profile={profile} isOwner={isOwner} />
+      <ProfileHeader profile={profile} isOwner={isOwner} isAdmin={ADMIN_UIDS.includes(user?.uid)} />
 
       {/* Not friends */}
       {!canSeeContent && (
