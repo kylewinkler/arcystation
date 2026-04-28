@@ -9,6 +9,7 @@ import {
 } from '../lib/firestore';
 import ListCard from '../components/lists/ListCard';
 import WatchedPoster from '../components/movies/WatchedPoster';
+import ReviewModal from '../components/modal/ReviewModal';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import ProfileHeader from '../components/profile/ProfileHeader';
@@ -34,6 +35,7 @@ export default function UserProfile() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [myWatchedIds, setMyWatchedIds] = useState(new Set());
+  const [selected, setSelected] = useState(null);
 
   const isOwner = user?.uid === uid;
 
@@ -183,7 +185,7 @@ export default function UserProfile() {
               )}
             </div>
             {allWatchedMovies.length > 0 ? (
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-5 gap-2 items-start">
                 {allWatchedMovies.slice(0, 5).map((m) => (
                   <WatchedPoster
                     key={m.tmdbId}
@@ -192,6 +194,7 @@ export default function UserProfile() {
                     posterPath={m.posterPath}
                     rating={m.rating}
                     glow={myWatchedIds.has(m.tmdbId)}
+                    onClick={() => setSelected(m)}
                   />
                 ))}
               </div>
@@ -273,6 +276,25 @@ export default function UserProfile() {
           Sign out
         </button>
       )}
+
+      <ReviewModal
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        movie={selected}
+        reviewerProfile={profile}
+        onReactionChange={(newReactions) => {
+          setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
+          setAllWatchedMovies((prev) => prev.map((mv) =>
+            mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
+          ));
+        }}
+        onEdit={({ rating, note, reactions }) => {
+          setSelected((prev) => (prev ? { ...prev, rating, note, reactions } : prev));
+          setAllWatchedMovies((prev) => prev.map((mv) =>
+            mv.tmdbId === selected?.tmdbId ? { ...mv, rating, note, reactions } : mv
+          ));
+        }}
+      />
     </div>
   );
 }

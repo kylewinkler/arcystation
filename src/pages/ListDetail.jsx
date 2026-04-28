@@ -284,10 +284,14 @@ export default function ListDetail() {
   const handleSubmitRating = async () => {
     const movie = movies.find((m) => m.tmdbId === ratingModal);
     await markWatched(user.uid, id, ratingModal, {
-      rating: rating || null,
+      rating: rating,
       note: note.trim() || null,
       movieData: movie || undefined,
     });
+    setGlobalRatings((prev) => ({
+      ...prev,
+      [ratingModal]: { ...(prev[ratingModal] || {}), rating: rating || null, note: note.trim() || null },
+    }));
     setRatingModal(null);
     showWatchedToast(!!rating);
 

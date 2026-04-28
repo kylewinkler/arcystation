@@ -250,7 +250,7 @@ export default function MovieDetail() {
 
   async function handleMarkWatched() {
     await markWatchedStandalone(user.uid, tmdbId, {
-      rating: rating || null,
+      rating: rating,
       note: note.trim() || null,
       movieData: getMovieData(),
     });

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getUserProfile, getAllWatchedMovies, getAllWatchedTmdbIds } from '../lib/firestore';
 import { getGenreList } from '../lib/tmdb';
 import WatchedPoster from '../components/movies/WatchedPoster';
+import ReviewModal from '../components/modal/ReviewModal';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../context/AuthContext';
@@ -24,6 +25,7 @@ export default function WatchedByYear() {
   const [sortBy, setSortBy] = useState('recent');
   const [loading, setLoading] = useState(true);
   const [myWatchedIds, setMyWatchedIds] = useState(new Set());
+  const [selected, setSelected] = useState(null);
 
   const isOwner = user?.uid === uid;
 
@@ -151,7 +153,7 @@ export default function WatchedByYear() {
 
       {/* Movie grid */}
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3 items-start">
           {filtered.map((m) => (
             <WatchedPoster
               key={m.tmdbId}
@@ -160,6 +162,7 @@ export default function WatchedByYear() {
               posterPath={m.posterPath}
               rating={m.rating}
               glow={myWatchedIds.has(m.tmdbId)}
+              onClick={() => setSelected(m)}
             />
           ))}
         </div>
@@ -170,6 +173,25 @@ export default function WatchedByYear() {
           scene={search || selectedGenre ? WATCHED_NO_MATCHES.scene : WATCHED_NONE.scene}
         />
       )}
+
+      <ReviewModal
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        movie={selected}
+        reviewerProfile={profile}
+        onReactionChange={(newReactions) => {
+          setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
+          setAllMovies((prev) => prev.map((mv) =>
+            mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
+          ));
+        }}
+        onEdit={({ rating, note, reactions }) => {
+          setSelected((prev) => (prev ? { ...prev, rating, note, reactions } : prev));
+          setAllMovies((prev) => prev.map((mv) =>
+            mv.tmdbId === selected?.tmdbId ? { ...mv, rating, note, reactions } : mv
+          ));
+        }}
+      />
     </div>
   );
 }

@@ -389,7 +389,7 @@ export function subscribeToWatched(uid, listId, callback) {
 
 // ── Reviews (global watched) ──
 
-export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieData } = {}) {
+export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieData, clearReactions = false } = {}) {
   const docId = reviewDocId(uid, tmdbId);
   const ref = doc(db, 'reviews', docId);
   const prev = await getDoc(ref);
@@ -403,9 +403,9 @@ export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieDa
     entry.posterPath = movieData.posterPath || null;
     if (movieData.genreIds?.length > 0) entry.genreIds = movieData.genreIds;
   }
-  if (rating != null) entry.rating = rating;
+  if (rating !== undefined) entry.rating = rating > 0 ? rating : deleteField();
   if (note != null) entry.note = note;
-  if (prev.exists() && prevRating !== newRating) {
+  if (prev.exists() && (prevRating !== newRating || clearReactions)) {
     entry.reactions = deleteField();
   }
   await setDoc(ref, entry, { merge: true });
@@ -567,7 +567,7 @@ export async function acceptFriendRequest(uid1, uid2) {
   const docRef = doc(db, 'friendships', docId);
   const snap = await getDoc(docRef);
   await updateDoc(docRef, { status: 'accepted' });
-  if (snap.exists()) {
+  if (snap.exists() && snap.data().status !== 'accepted') {
     const { requestedBy } = snap.data();
     const acceptedBy = uid1 === requestedBy ? uid2 : uid1;
     await createNotification('friend_accepted', acceptedBy, requestedBy, {});

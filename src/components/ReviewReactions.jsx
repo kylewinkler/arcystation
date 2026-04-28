@@ -11,13 +11,15 @@ export default function ReviewReactions({
 }) {
   const upCount = Object.values(reactions).filter((r) => r === 'up').length;
   const downCount = Object.values(reactions).filter((r) => r === 'down').length;
+  const wowCount = Object.values(reactions).filter((r) => r === 'wow').length;
 
   if (!currentUserUid || currentUserUid === reviewerUid) {
-    if (upCount === 0 && downCount === 0) return null;
+    if (upCount === 0 && downCount === 0 && wowCount === 0) return null;
     return (
       <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
         {upCount > 0 && <span>👍 {upCount}</span>}
         {downCount > 0 && <span>👎 {downCount}</span>}
+        {wowCount > 0 && <span>😮 {wowCount}</span>}
       </div>
     );
   }
@@ -58,6 +60,14 @@ export default function ReviewReactions({
       >
         <span>👎</span>
         {downCount > 0 && <span>{downCount}</span>}
+      </button>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); react('wow'); }}
+        className={`${btnBase} ${myReaction === 'wow' ? active : inactive}`}
+        aria-pressed={myReaction === 'wow'}
+      >
+        <span>😮</span>
+        {wowCount > 0 && <span>{wowCount}</span>}
       </button>
     </div>
   );

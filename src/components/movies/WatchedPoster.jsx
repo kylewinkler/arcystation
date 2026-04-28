@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom';
 import { posterUrl } from '../../lib/tmdb';
 import StarRating from '../StarRating';
 
-export default function WatchedPoster({ tmdbId, title, posterPath, rating, glow = true }) {
+export default function WatchedPoster({ tmdbId, title, posterPath, rating, glow = true, onClick }) {
   const glowClass = glow ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : '';
 
-  return (
-    <Link to={`/movie/${tmdbId}`} className="group" title={title}>
+  const content = (
+    <>
       {posterPath ? (
         <img
           src={posterUrl(posterPath, 'w185')}
@@ -24,6 +24,25 @@ export default function WatchedPoster({ tmdbId, title, posterPath, rating, glow 
           <StarRating value={rating} size="sm" />
         </div>
       )}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="group text-left w-full block"
+        title={title}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link to={`/movie/${tmdbId}`} className="group" title={title}>
+      {content}
     </Link>
   );
 }

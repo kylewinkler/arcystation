@@ -96,7 +96,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
 
   async function handleSaveRating() {
     await markWatchedStandalone(user.uid, movie.tmdbId, {
-      rating: rating || null,
+      rating: rating,
       note: note.trim() || null,
       movieData: getMovieData(),
     });

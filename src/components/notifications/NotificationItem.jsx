@@ -214,11 +214,15 @@ export default function NotificationItem({ notification, profile, onFriendAction
       link = notification.fromUid ? `/user/${notification.fromUid}` : null;
       break;
     case 'review_reaction':
-      icon = data.reaction === 'up' ? '👍' : '👎';
+      icon = data.reaction === 'up' ? '👍' : data.reaction === 'wow' ? '😮' : '👎';
       text = (
         <>
           <span className="text-white font-medium">{profile?.displayName}</span>
-          {data.reaction === 'up' ? ' gave a thumbs up to your review of ' : ' gave a thumbs down to your review of '}
+          {data.reaction === 'up'
+            ? ' gave a thumbs up to your review of '
+            : data.reaction === 'wow'
+            ? ' reacted 😮 to your review of '
+            : ' gave a thumbs down to your review of '}
           <span className="text-white font-medium">{data.movieTitle}</span>
         </>
       );
