@@ -7,12 +7,14 @@ import {
   getPendingListInvites, acceptListInvite, declineListInvite,
   getAllWatchedTmdbIds, reconcileUserWatchedCounts,
   getWatchedInfo,
+  getNotifications, getReactionsForReviews, getThrowbackReview,
 } from '../lib/firestore';
 import { discoverMovies, posterUrl } from '../lib/tmdb';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
+import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 import NoComms from '../assets/images/arcy-scenes/no-comms.png';
 
 function pickRandom(arr) {
@@ -44,9 +46,13 @@ export default function Home() {
   const { user } = useAuth();
   const [invites, setInvites] = useState([]);
   const [continueItem, setContinueItem] = useState(null);
+  const [startWatching, setStartWatching] = useState(null);
   const [weekPick, setWeekPick] = useState(null);
   const [weekPickReview, setWeekPickReview] = useState(null);
   const [almostDone, setAlmostDone] = useState(null);
+  const [newInLists, setNewInLists] = useState(null);
+  const [throwback, setThrowback] = useState(null);
+  const [friendActivity, setFriendActivity] = useState(null);
   const [hasLists, setHasLists] = useState(false);
   const [loading, setLoading] = useState(true);
   const [popularMovies, setPopularMovies] = useState([]);
@@ -116,24 +122,18 @@ export default function Home() {
     const valid = enriched.filter(Boolean);
     setHasLists(valid.length > 0);
 
-    if (valid.length === 0) {
-      setLoading(false);
-      return;
-    }
-
-    const allIncomplete = valid.filter(
-      (item) => item.watchedCount > 0 && item.watchedCount < (item.list.movieCount || 0)
+    // Lists that still have unwatched movies — superset that powers the week-pick
+    // (any list with something unwatched is fair game) and contains allIncomplete
+    // (started lists, which power Continue/Almost-done).
+    const withUnwatched = valid.filter(
+      (item) => item.watchedCount < (item.list.movieCount || 0)
     );
-
-    if (allIncomplete.length === 0) {
-      setLoading(false);
-      return;
-    }
+    const allIncomplete = withUnwatched.filter((item) => item.watchedCount > 0);
 
     const movieData = {};
     const watchedData = {};
     await Promise.all(
-      allIncomplete.map(async (item) => {
+      withUnwatched.map(async (item) => {
         const [movies, watched] = await Promise.all([
           getListMovies(item.listId),
           getWatchedMovies(user.uid, item.listId),
@@ -181,7 +181,7 @@ export default function Home() {
         item,
         ratio: item.watchedCount / (item.list.movieCount || 1),
       }))
-      .filter(({ item }) => item.listId !== continueList.listId)
+      .filter(({ item }) => !continueList || item.listId !== continueList.listId)
       .sort((a, b) => b.ratio - a.ratio);
 
     if (withRatio.length > 0 && withRatio[0].ratio >= 0.5) {
@@ -210,12 +210,17 @@ export default function Home() {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.weekKey === weekKey && parsed.movie?.tmdbId) pick = parsed;
+        const fresh = parsed?.weekKey === weekKey && parsed.movie?.tmdbId;
+        // Self-heal: if the cached pick references a list the user is no
+        // longer in (left/deleted), regenerate instead of showing stale info.
+        const listStillValid =
+          parsed?.listId && valid.some((v) => v.listId === parsed.listId);
+        if (fresh && listStillValid) pick = parsed;
       }
     } catch { /* corrupt entry — regenerate */ }
 
     if (!pick) {
-      const shuffledLists = [...allIncomplete].sort(() => Math.random() - 0.5);
+      const shuffledLists = [...withUnwatched].sort(() => Math.random() - 0.5);
       for (const item of shuffledLists) {
         const candidates = (movieData[item.listId] || [])
           .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
@@ -245,13 +250,110 @@ export default function Home() {
       }
     }
 
+    // Track tmdbIds already shown so the same movie doesn't appear across
+    // multiple cards (Continue + Week pick + Start watching + New).
+    const usedTmdbIds = new Set([
+      continueMovie?.tmdbId,
+      pick?.movie?.tmdbId,
+    ].filter(Boolean));
+
+    // Start watching: a fresh list (movies present, none watched yet) — picks
+    // a released unwatched movie so the user has somewhere obvious to begin.
+    // Skipped if Continue already covers an actionable list.
+    const freshLists = withUnwatched.filter((item) => item.watchedCount === 0);
+    if (freshLists.length > 0) {
+      const shuffled = [...freshLists].sort(() => Math.random() - 0.5);
+      for (const item of shuffled) {
+        const candidates = (movieData[item.listId] || [])
+          .filter((m) => !usedTmdbIds.has(m.tmdbId))
+          .filter(isReleased);
+        if (candidates.length > 0) {
+          const movie = pickRandom(candidates);
+          setStartWatching({ movie, listTitle: item.list.title, listId: item.listId });
+          usedTmdbIds.add(movie.tmdbId);
+          break;
+        }
+      }
+    }
+
+    // New in your lists: a movie tracked in any of the user's lists that
+    // released within the last 30 days. Free to compute — we already have
+    // movieData fetched. Prefers unwatched.
+    const NEW_WINDOW_DAYS = 30;
+    const newCutoff = Date.now() - NEW_WINDOW_DAYS * 86400000;
+    const newCandidates = [];
+    for (const item of withUnwatched) {
+      for (const m of (movieData[item.listId] || [])) {
+        if (usedTmdbIds.has(m.tmdbId)) continue;
+        if (watchedData[item.listId]?.[m.tmdbId]) continue;
+        const dateStr = m.releaseDate || m.release_date;
+        if (!dateStr) continue;
+        const t = new Date(dateStr).getTime();
+        if (t >= newCutoff && t <= Date.now()) {
+          newCandidates.push({ movie: m, listTitle: item.list.title, listId: item.listId, releasedAt: t });
+        }
+      }
+    }
+    if (newCandidates.length > 0) {
+      newCandidates.sort((a, b) => b.releasedAt - a.releasedAt);
+      const top = newCandidates[0];
+      setNewInLists({ movie: top.movie, listTitle: top.listTitle, listId: top.listId });
+      usedTmdbIds.add(top.movie.tmdbId);
+    }
+
+    // Friend activity — only watched_movie notifications, grouped via
+    // groupActivity (consecutive same-friend watches collapse into one tile)
+    // and rendered with NotificationItem to match the Friends-page feed.
+    // Throwback runs in parallel; both are non-fatal.
+    const [notifs, throwbackReview] = await Promise.all([
+      getNotifications(user.uid).catch(() => []),
+      getThrowbackReview(user.uid).catch(() => null),
+    ]);
+
+    const watchedMovieFeed = notifs.filter((n) => n.type === 'watched_movie');
+    const topGroups = groupActivity(watchedMovieFeed).slice(0, 5);
+    if (topGroups.length > 0) {
+      const fromUids = [...new Set(topGroups.map((g) => g.fromUid))];
+      const profileEntries = await Promise.all(
+        fromUids.map(async (uid) => [uid, await getUserProfile(uid)])
+      );
+      const profileMap = Object.fromEntries(profileEntries.filter(([, p]) => p));
+
+      const reviewRefs = [];
+      const seen = new Set();
+      topGroups.forEach((g) => g.items.forEach((n) => {
+        if (n.fromUid && n.data?.tmdbId) {
+          const key = `${n.fromUid}__${n.data.tmdbId}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            reviewRefs.push({ reviewerUid: n.fromUid, tmdbId: String(n.data.tmdbId) });
+          }
+        }
+      }));
+      const reactions = reviewRefs.length > 0
+        ? await getReactionsForReviews(reviewRefs).catch(() => ({}))
+        : {};
+
+      setFriendActivity({ groups: topGroups, profiles: profileMap, reactions });
+    }
+
+    if (throwbackReview) setThrowback(throwbackReview);
+
     setLoading(false);
   }
 
   if (loading) return <LoadingScreen />;
 
   const pickWatched = !!weekPick && watchedIds.has(weekPick.movie.tmdbId);
-  const hasAnyAction = invites.length > 0 || weekPick || continueItem || almostDone;
+  const hasAnyAction =
+    invites.length > 0 ||
+    weekPick ||
+    continueItem ||
+    startWatching ||
+    almostDone ||
+    newInLists ||
+    (friendActivity && friendActivity.groups.length > 0) ||
+    throwback;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -381,8 +483,43 @@ export default function Home() {
         </div>
       )}
 
+      
+      {/* Friend activity — watched_movie notifications, grouped + rendered
+          identically to the Friends-page feed. */}
+      {friendActivity && friendActivity.groups.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+              Friend activity
+            </h3>
+            <Link to="/friends" className="text-xs text-purple-400 hover:text-purple-300">
+              View all →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {friendActivity.groups.map((g) => (
+              <NotificationItem
+                key={g.items[0].id}
+                notification={g.items[0]}
+                profile={friendActivity.profiles[g.fromUid]}
+                extraCount={g.items.length - 1}
+                items={g.items}
+                currentUserUid={user.uid}
+                reactionsByReview={friendActivity.reactions}
+                onReactionChange={(reviewerUid, tmdbId, newReactions) => {
+                  setFriendActivity((prev) => prev ? {
+                    ...prev,
+                    reactions: { ...prev.reactions, [`${reviewerUid}__${tmdbId}`]: newReactions },
+                  } : prev);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Secondary actionable cards */}
-      {(continueItem || almostDone) && (
+      {(continueItem || startWatching || almostDone) && (
         <div className="space-y-3">
           {continueItem && (
             <SuggestionCard
@@ -390,6 +527,14 @@ export default function Home() {
               label={<><span className="text-white">Continue</span> {continueItem.listTitle}</>}
               labelColor="text-purple-400"
               to={`/lists/${continueItem.listId}`}
+            />
+          )}
+          {startWatching && (
+            <SuggestionCard
+              movie={startWatching.movie}
+              label={<><span className="text-white">Start watching</span> {startWatching.listTitle}</>}
+              labelColor="text-blue-400"
+              to={`/lists/${startWatching.listId}`}
             />
           )}
           {almostDone && (
@@ -402,6 +547,27 @@ export default function Home() {
             />
           )}
         </div>
+      )}
+
+      {/* New in your lists — recently released movie tracked in one of the user's lists */}
+      {newInLists && (
+        <SuggestionCard
+          movie={newInLists.movie}
+          label={<><span className="text-white">Just released</span> on {newInLists.listTitle}</>}
+          labelColor="text-pink-400"
+          to={`/movie/${newInLists.movie.tmdbId}`}
+        />
+      )}
+
+      {/* Throwback — a movie the user watched ~1 year ago today */}
+      {throwback && (
+        <SuggestionCard
+          movie={throwback}
+          label={<><span className="text-white">A year ago you watched</span></>}
+          sublabel={throwback.note ? `"${throwback.note}"` : undefined}
+          labelColor="text-amber-400"
+          to={`/movie/${throwback.tmdbId}`}
+        />
       )}
 
       {/* Empty state — no lists at all */}

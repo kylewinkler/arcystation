@@ -543,6 +543,29 @@ export async function getFriendReviewsForMovie(uid, tmdbId) {
     .sort((a, b) => (b.review.watchedAt?.seconds || 0) - (a.review.watchedAt?.seconds || 0));
 }
 
+// Throwback pick — a review from roughly one year ago today, within a ±2 week
+// window so we don't miss when activity was sparse on the exact date.
+export async function getThrowbackReview(uid) {
+  const now = new Date();
+  const start = new Date(now);
+  start.setFullYear(start.getFullYear() - 1);
+  start.setDate(start.getDate() - 14);
+  const end = new Date(now);
+  end.setFullYear(end.getFullYear() - 1);
+  end.setDate(end.getDate() + 14);
+
+  const q = query(
+    collection(db, 'reviews'),
+    where('uid', '==', uid),
+    where('watchedAt', '>=', start),
+    where('watchedAt', '<=', end),
+    orderBy('watchedAt', 'desc'),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+}
+
 // ── Friendships ──
 
 function friendshipId(uid1, uid2) {
