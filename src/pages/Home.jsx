@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getUserAllProgress, getList, getUserProfile, getListMovies, getWatchedMovies,
-  getPinnedLists,
   getPendingListInvites, acceptListInvite, declineListInvite,
   getAllWatchedTmdbIds, reconcileUserWatchedCounts,
   getWatchedInfo,
@@ -45,12 +44,8 @@ function isReleased(m) {
 export default function Home() {
   const { user } = useAuth();
   const [invites, setInvites] = useState([]);
-  const [continueItem, setContinueItem] = useState(null);
-  const [startWatching, setStartWatching] = useState(null);
   const [weekPick, setWeekPick] = useState(null);
   const [weekPickReview, setWeekPickReview] = useState(null);
-  const [almostDone, setAlmostDone] = useState(null);
-  const [newInLists, setNewInLists] = useState(null);
   const [throwback, setThrowback] = useState(null);
   const [friendActivity, setFriendActivity] = useState(null);
   const [hasLists, setHasLists] = useState(false);
@@ -88,9 +83,8 @@ export default function Home() {
       } catch { /* non-fatal — let the rest of load proceed */ }
     }
 
-    const [allProgress, pinned, pendingInvites, popResult, ids] = await Promise.all([
+    const [allProgress, pendingInvites, popResult, ids] = await Promise.all([
       getUserAllProgress(user.uid),
-      getPinnedLists(user.uid),
       getPendingListInvites(user.uid),
       discoverMovies({ tab: 'popular' }),
       getAllWatchedTmdbIds(user.uid),
@@ -108,7 +102,6 @@ export default function Home() {
       })
     );
     setInvites(enrichedInvites.filter((inv) => inv.list));
-    const pinnedSet = new Set(pinned);
 
     const enriched = await Promise.all(
       allProgress.map(async (p) => {
@@ -122,13 +115,11 @@ export default function Home() {
     const valid = enriched.filter(Boolean);
     setHasLists(valid.length > 0);
 
-    // Lists that still have unwatched movies — superset that powers the week-pick
-    // (any list with something unwatched is fair game) and contains allIncomplete
-    // (started lists, which power Continue/Almost-done).
+    // Lists that still have unwatched movies — power the week-pick
+    // (any list with something unwatched is fair game).
     const withUnwatched = valid.filter(
       (item) => item.watchedCount < (item.list.movieCount || 0)
     );
-    const allIncomplete = withUnwatched.filter((item) => item.watchedCount > 0);
 
     const movieData = {};
     const watchedData = {};
@@ -142,64 +133,6 @@ export default function Home() {
         watchedData[item.listId] = watched;
       })
     );
-
-    // Continue watching: most-recent activity on a pinned list, falling back
-    // to any other list by recency. Walk candidates in priority order and
-    // pick the first one that actually has a released-unwatched movie — a
-    // pinned list with no viable pick should yield to the next candidate,
-    // not silently hide the tile.
-    const byRecent = [...allIncomplete].sort(
-      (a, b) => (b.lastActivityAt?.seconds || 0) - (a.lastActivityAt?.seconds || 0)
-    );
-    const pinnedIncomplete = byRecent.filter((item) => pinnedSet.has(item.listId));
-    const unpinnedIncomplete = byRecent.filter((item) => !pinnedSet.has(item.listId));
-    const candidates = [...pinnedIncomplete, ...unpinnedIncomplete];
-
-    let continueList = null;
-    let continueMovie = null;
-    for (const cand of candidates) {
-      const unwatched = (movieData[cand.listId] || [])
-        .filter((m) => !watchedData[cand.listId]?.[m.tmdbId])
-        .filter(isReleased);
-      if (unwatched.length > 0) {
-        continueList = cand;
-        continueMovie = pickRandom(unwatched);
-        break;
-      }
-    }
-    if (continueMovie) {
-      setContinueItem({
-        movie: continueMovie,
-        listTitle: continueList.list.title,
-        listId: continueList.listId,
-      });
-    }
-
-    // Almost done: list with highest % watched (excluding the one already used for continue)
-    const withRatio = allIncomplete
-      .map((item) => ({
-        item,
-        ratio: item.watchedCount / (item.list.movieCount || 1),
-      }))
-      .filter(({ item }) => !continueList || item.listId !== continueList.listId)
-      .sort((a, b) => b.ratio - a.ratio);
-
-    if (withRatio.length > 0 && withRatio[0].ratio >= 0.5) {
-      const almost = withRatio[0].item;
-      const remaining = (movieData[almost.listId] || [])
-        .filter((m) => !watchedData[almost.listId]?.[m.tmdbId])
-        .filter(isReleased);
-      const almostMovie = pickRandom(remaining);
-      if (almostMovie) {
-        const left = (almost.list.movieCount || 0) - almost.watchedCount;
-        setAlmostDone({
-          movie: almostMovie,
-          listTitle: almost.list.title,
-          listId: almost.listId,
-          remaining: left,
-        });
-      }
-    }
 
     // This week's pick: stable per ISO week, persisted to localStorage so the
     // user sees the same movie all week even after watching it.
@@ -224,7 +157,6 @@ export default function Home() {
       for (const item of shuffledLists) {
         const candidates = (movieData[item.listId] || [])
           .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
-          .filter((m) => m.tmdbId !== continueMovie?.tmdbId)
           .filter(isReleased);
         if (candidates.length > 0) {
           const movie = pickRandom(candidates);
@@ -248,57 +180,6 @@ export default function Home() {
           if (info) setWeekPickReview(info);
         } catch { /* non-fatal */ }
       }
-    }
-
-    // Track tmdbIds already shown so the same movie doesn't appear across
-    // multiple cards (Continue + Week pick + Start watching + New).
-    const usedTmdbIds = new Set([
-      continueMovie?.tmdbId,
-      pick?.movie?.tmdbId,
-    ].filter(Boolean));
-
-    // Start watching: a fresh list (movies present, none watched yet) — picks
-    // a released unwatched movie so the user has somewhere obvious to begin.
-    // Skipped if Continue already covers an actionable list.
-    const freshLists = withUnwatched.filter((item) => item.watchedCount === 0);
-    if (freshLists.length > 0) {
-      const shuffled = [...freshLists].sort(() => Math.random() - 0.5);
-      for (const item of shuffled) {
-        const candidates = (movieData[item.listId] || [])
-          .filter((m) => !usedTmdbIds.has(m.tmdbId))
-          .filter(isReleased);
-        if (candidates.length > 0) {
-          const movie = pickRandom(candidates);
-          setStartWatching({ movie, listTitle: item.list.title, listId: item.listId });
-          usedTmdbIds.add(movie.tmdbId);
-          break;
-        }
-      }
-    }
-
-    // New in your lists: a movie tracked in any of the user's lists that
-    // released within the last 30 days. Free to compute — we already have
-    // movieData fetched. Prefers unwatched.
-    const NEW_WINDOW_DAYS = 30;
-    const newCutoff = Date.now() - NEW_WINDOW_DAYS * 86400000;
-    const newCandidates = [];
-    for (const item of withUnwatched) {
-      for (const m of (movieData[item.listId] || [])) {
-        if (usedTmdbIds.has(m.tmdbId)) continue;
-        if (watchedData[item.listId]?.[m.tmdbId]) continue;
-        const dateStr = m.releaseDate || m.release_date;
-        if (!dateStr) continue;
-        const t = new Date(dateStr).getTime();
-        if (t >= newCutoff && t <= Date.now()) {
-          newCandidates.push({ movie: m, listTitle: item.list.title, listId: item.listId, releasedAt: t });
-        }
-      }
-    }
-    if (newCandidates.length > 0) {
-      newCandidates.sort((a, b) => b.releasedAt - a.releasedAt);
-      const top = newCandidates[0];
-      setNewInLists({ movie: top.movie, listTitle: top.listTitle, listId: top.listId });
-      usedTmdbIds.add(top.movie.tmdbId);
     }
 
     // Friend activity — only watched_movie notifications, grouped via
@@ -348,10 +229,6 @@ export default function Home() {
   const hasAnyAction =
     invites.length > 0 ||
     weekPick ||
-    continueItem ||
-    startWatching ||
-    almostDone ||
-    newInLists ||
     (friendActivity && friendActivity.groups.length > 0) ||
     throwback;
 
@@ -516,47 +393,6 @@ export default function Home() {
             ))}
           </div>
         </div>
-      )}
-
-      {/* Secondary actionable cards */}
-      {(continueItem || startWatching || almostDone) && (
-        <div className="space-y-3">
-          {continueItem && (
-            <SuggestionCard
-              movie={continueItem.movie}
-              label={<><span className="text-white">Continue</span> {continueItem.listTitle}</>}
-              labelColor="text-purple-400"
-              to={`/lists/${continueItem.listId}`}
-            />
-          )}
-          {startWatching && (
-            <SuggestionCard
-              movie={startWatching.movie}
-              label={<><span className="text-white">Start watching</span> {startWatching.listTitle}</>}
-              labelColor="text-blue-400"
-              to={`/lists/${startWatching.listId}`}
-            />
-          )}
-          {almostDone && (
-            <SuggestionCard
-              movie={almostDone.movie}
-              label={<><span className="text-white">Almost done with</span> {almostDone.listTitle}</>}
-              sublabel={`${almostDone.remaining} ${almostDone.remaining === 1 ? 'movie' : 'movies'} left`}
-              labelColor="text-green-400"
-              to={`/lists/${almostDone.listId}`}
-            />
-          )}
-        </div>
-      )}
-
-      {/* New in your lists — recently released movie tracked in one of the user's lists */}
-      {newInLists && (
-        <SuggestionCard
-          movie={newInLists.movie}
-          label={<><span className="text-white">Just released</span> on {newInLists.listTitle}</>}
-          labelColor="text-pink-400"
-          to={`/movie/${newInLists.movie.tmdbId}`}
-        />
       )}
 
       {/* Throwback — a movie the user watched ~1 year ago today */}
