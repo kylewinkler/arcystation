@@ -21,18 +21,24 @@ export default function ListCard({
   return (
     <Link
       to={href}
-      className={`flex bg-gray-900 border rounded-lg overflow-hidden hover:border-purple-500 transition-colors ${
+      className={`relative flex bg-gray-900 border rounded-lg overflow-hidden hover:border-purple-500 transition-colors ${
         pinned ? 'border-purple-500/40' : 'border-gray-800'
       }`}
     >
       {featuredPoster && (
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl pointer-events-none"
+          style={{ backgroundImage: `url(${posterUrl(featuredPoster, 'w500')})` }}
+        />
+      )}
+      {featuredPoster && (
         <img
           src={posterUrl(featuredPoster, 'w92')}
           alt=""
-          className="w-14 h-full object-cover shrink-0"
+          className="relative w-14 h-full object-cover shrink-0"
         />
       )}
-      <div className="flex-1 min-w-0 p-4">
+      <div className="relative flex-1 min-w-0 p-4">
         <div className="flex items-start justify-between gap-2 mb-1">
           <div>
             <h3 className="text-white font-medium line-clamp-2">{title}</h3>

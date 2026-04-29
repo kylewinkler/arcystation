@@ -21,11 +21,17 @@ export default function SuggestionCard({ movie, label, sublabel, labelColor = 't
   return (
     <div
       onClick={() => navigate(cardTo)}
-      className="flex items-center gap-4 bg-gray-900/60 border border-gray-800 rounded-lg p-3 hover:border-purple-500 transition-colors cursor-pointer"
+      className="relative flex items-center gap-4 bg-gray-900/60 border border-gray-800 rounded-lg p-3 hover:border-purple-500 transition-colors cursor-pointer overflow-hidden"
     >
+      {movie.posterPath && (
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl pointer-events-none"
+          style={{ backgroundImage: `url(${posterUrl(movie.posterPath, 'w500')})` }}
+        />
+      )}
       {movie.posterPath ? (
         hasCustomLink ? (
-          <Link to={movieTo} onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <Link to={movieTo} onClick={(e) => e.stopPropagation()} className="relative shrink-0">
             <img
               src={posterUrl(movie.posterPath, 'w185')}
               alt={movie.title}
@@ -36,15 +42,15 @@ export default function SuggestionCard({ movie, label, sublabel, labelColor = 't
           <img
             src={posterUrl(movie.posterPath, 'w185')}
             alt={movie.title}
-            className="w-16 h-24 rounded object-cover shrink-0"
+            className="relative w-16 h-24 rounded object-cover shrink-0"
           />
         )
       ) : (
-        <div className="w-16 h-24 rounded bg-gray-800 shrink-0 flex items-center justify-center text-gray-500 text-xs">
+        <div className="relative w-16 h-24 rounded bg-gray-800 shrink-0 flex items-center justify-center text-gray-500 text-xs">
           No img
         </div>
       )}
-      <div className="flex-1 min-w-0">
+      <div className="relative flex-1 min-w-0">
         {label && (
           <p className={`text-xs font-medium mb-0.5 ${labelColor}`}>{label}</p>
         )}

@@ -324,27 +324,27 @@ export default function Home() {
                   style={{ backgroundImage: `url(${posterUrl(weekPick.movie.posterPath, 'w500')})` }}
                 />
               ) : null}
-              <div className="relative flex gap-4 p-4">
+              <div className="relative flex items-center gap-4 p-3">
                 {weekPick.movie.posterPath ? (
                   <img
-                    src={posterUrl(weekPick.movie.posterPath, 'w342')}
+                    src={posterUrl(weekPick.movie.posterPath, 'w185')}
                     alt={weekPick.movie.title}
-                    className="w-28 sm:w-32 aspect-[2/3] rounded-lg object-cover shrink-0 shadow-lg"
+                    className="w-16 h-24 rounded object-cover shrink-0 shadow-lg"
                   />
                 ) : (
-                  <div className="w-28 sm:w-32 aspect-[2/3] rounded-lg bg-gray-800 shrink-0" />
+                  <div className="w-16 h-24 rounded bg-gray-800 shrink-0" />
                 )}
-                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <p className={`text-xs font-medium mb-1 ${pickWatched ? 'text-orange-400' : 'text-yellow-400/90'}`}>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-medium mb-0.5 ${pickWatched ? 'text-orange-400' : 'text-yellow-400/90'}`}>
                     {pickWatched ? '🍿 Your pick this week' : "🎬 This week's pick"}
                   </p>
-                  <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight">
+                  <p className="text-white font-medium truncate">
                     {weekPick.movie.title}
-                  </h2>
-                  {weekPick.movie.year && (
-                    <p className="text-gray-400 text-sm mt-0.5">{weekPick.movie.year}</p>
-                  )}
-                  <p className="text-gray-500 text-xs mt-2">from {weekPick.listTitle}</p>
+                    {weekPick.movie.year && (
+                      <span className="text-gray-400 font-normal"> ({weekPick.movie.year})</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">from {weekPick.listTitle}</p>
                   {pickWatched && weekPickReview && (weekPickReview.rating || weekPickReview.note) && (
                     <div className="mt-2">
                       {weekPickReview.rating > 0 && <StarRating value={weekPickReview.rating} size="sm" />}
