@@ -237,10 +237,12 @@ export default function Lists() {
   if (tab === 'created') activeList = allLists.filter((item) => item.isListOwner);
   else if (tab === 'joined') activeList = allLists.filter((item) => !item.isListOwner);
   else if (tab === 'favorites') activeList = allLists.filter((item) => pinnedIds.has(item.listId));
-  else if (tab === 'collections') activeList = collections;
+  else if (tab === 'collections') {
+    // Joined prebuilts (with progress) on top, then undiscovered ones.
+    const joinedPrebuilts = allLists.filter((item) => item.list.isPrebuilt);
+    activeList = [...joinedPrebuilts, ...collections];
+  }
   else activeList = allLists;
-
-  const isCollections = tab === 'collections';
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
@@ -344,32 +346,37 @@ export default function Lists() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {isCollections
-            ? paginated.map((list) => (
+          {paginated.map((item) => {
+            // Collections filter mixes joined prebuilts (have `.list`/progress)
+            // with raw, undiscovered prebuilt docs (no `.listId`).
+            if (!item.listId) {
+              return (
                 <ListCard
-                  key={`col-${list.id}`}
-                  listId={list.id}
-                  title={list.title}
-                  total={list.movieCount || 0}
+                  key={`col-${item.id}`}
+                  listId={item.id}
+                  title={item.title}
+                  total={item.movieCount || 0}
                   isPrebuilt
-                  featuredPoster={list.featuredMovie?.posterPath || list.firstPoster}
+                  featuredPoster={item.featuredMovie?.posterPath || item.firstPoster}
                 />
-              ))
-            : paginated.map((item) => (
-                <ListCard
-                  key={item.id}
-                  listId={item.listId}
-                  title={item.list.title}
-                  total={item.list.movieCount || 0}
-                  watched={item.watchedCount}
-                  isOwner={item.isListOwner}
-                  isPrebuilt={item.list.isPrebuilt || false}
-                  creatorName={item.creator?.displayName}
-                  pinned={pinnedIds.has(item.listId)}
-                  onTogglePin={handleTogglePin}
-                  featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
-                />
-              ))}
+              );
+            }
+            return (
+              <ListCard
+                key={item.id}
+                listId={item.listId}
+                title={item.list.title}
+                total={item.list.movieCount || 0}
+                watched={item.watchedCount}
+                isOwner={item.isListOwner}
+                isPrebuilt={item.list.isPrebuilt || false}
+                creatorName={item.creator?.displayName}
+                pinned={pinnedIds.has(item.listId)}
+                onTogglePin={handleTogglePin}
+                featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
+              />
+            );
+          })}
         </div>
       )}
 

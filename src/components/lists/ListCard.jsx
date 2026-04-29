@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { posterUrl } from '../../lib/tmdb';
 import ProgressBar from './ProgressBar';
-import ArcyPop from '../../assets/images/arcy-poses/arcy-float.png';
+import ArcyPop from '../../assets/images/arcy-poses/arcy-read-transmission.png';
 
 export default function ListCard({
   listId,
