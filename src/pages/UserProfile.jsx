@@ -449,107 +449,61 @@ export default function UserProfile() {
               </div>
             )}
 
-            {isOwner && newInLists && (
-              <SuggestionCard
-                movie={newInLists.movie}
-                label={<><span className="text-white">Just released</span> on {newInLists.listTitle}</>}
-                labelColor="text-pink-400"
-                to={`/movie/${newInLists.movie.tmdbId}`}
-              />
-            )}
-
-            {/* Filter pills — owner only */}
+            {/* Owner: View more link below suggestion tiles */}
             {isOwner && (
-              <div className="flex flex-wrap gap-2">
-                {FILTERS.map((f) => (
-                  <button
-                    key={f.key}
-                    onClick={() => setSearchParams({ tab: f.key })}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      tab === f.key
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-900 text-gray-400 hover:text-white border border-gray-800'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              <div className="flex justify-end">
+                <Link to="/lists" className="text-xs text-purple-400 hover:text-purple-300">
+                  View more →
+                </Link>
               </div>
             )}
 
-            {/* List grid */}
-            {paginated.length === 0 ? (
-              isOwner ? (
-                <div className="text-center">
-                  <img
-                    src={EmptyArchives}
-                    alt=""
-                    className="mx-auto mb-4 w-full max-w-md select-none"
-                    draggable="false"
-                  />
-                  <p className="text-gray-400">{ownerEmpty}</p>
-                </div>
-              ) : (
-                <NotFound title={PROFILE_NO_LISTS.title} subtitle={PROFILE_NO_LISTS.subtitle} scene={PROFILE_NO_LISTS.scene} />
-              )
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {paginated.map((item) => {
-                  // Collections tab mixes joined prebuilts (have `.list`/progress)
-                  // with raw, undiscovered prebuilt docs (no `.listId`).
-                  if (!item.listId) {
-                    return (
+            {/* Friend view: full list grid + pagination */}
+            {!isOwner && (
+              <>
+                {paginated.length === 0 ? (
+                  <NotFound title={PROFILE_NO_LISTS.title} subtitle={PROFILE_NO_LISTS.subtitle} scene={PROFILE_NO_LISTS.scene} />
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {paginated.map((item) => (
                       <ListCard
-                        key={`col-${item.id}`}
-                        listId={item.id}
-                        title={item.title}
-                        total={item.movieCount || 0}
-                        isPrebuilt
-                        featuredPoster={item.featuredMovie?.posterPath || item.firstPoster}
+                        key={item.id}
+                        listId={item.listId}
+                        title={item.list.title}
+                        total={item.list.movieCount || 0}
+                        watched={item.watchedCount}
+                        isOwner={item.isViewerOwned}
+                        isPrebuilt={item.list.isPrebuilt || false}
+                        creatorName={item.creator?.displayName}
+                        featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
+                        to={`/lists/${item.listId}?viewer=${uid}`}
                       />
-                    );
-                  }
-                  return (
-                    <ListCard
-                      key={item.id}
-                      listId={item.listId}
-                      title={item.list.title}
-                      total={item.list.movieCount || 0}
-                      watched={item.watchedCount}
-                      isOwner={item.isViewerOwned}
-                      isPrebuilt={item.list.isPrebuilt || false}
-                      creatorName={item.creator?.displayName}
-                      pinned={pinnedIds.has(item.listId)}
-                      onTogglePin={isOwner ? handleTogglePin : undefined}
-                      featuredPoster={item.list.featuredMovie?.posterPath || item.list.firstPoster}
-                      to={isOwner ? `/lists/${item.listId}` : `/lists/${item.listId}?viewer=${uid}`}
-                    />
-                  );
-                })}
-              </div>
-            )}
+                    ))}
+                  </div>
+                )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="text-sm text-gray-400 hover:text-white disabled:text-gray-700 transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-gray-500">
-                  {page} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="text-sm text-gray-400 hover:text-white disabled:text-gray-700 transition-colors"
-                >
-                  Next
-                </button>
-              </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="text-sm text-gray-400 hover:text-white disabled:text-gray-700 transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-gray-500">
+                      {page} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="text-sm text-gray-400 hover:text-white disabled:text-gray-700 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

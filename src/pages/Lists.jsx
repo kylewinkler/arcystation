@@ -276,46 +276,6 @@ export default function Lists() {
         </Link>
       </div>
 
-      {/* Suggestion tiles — Continue / Start watching / Almost done / New */}
-      {(continueItem || startWatching || almostDone) && (
-        <div className="space-y-3">
-          {continueItem && (
-            <SuggestionCard
-              movie={continueItem.movie}
-              label={<><span className="text-white">Continue</span> {continueItem.listTitle}</>}
-              labelColor="text-purple-400"
-              to={`/lists/${continueItem.listId}`}
-            />
-          )}
-          {startWatching && (
-            <SuggestionCard
-              movie={startWatching.movie}
-              label={<><span className="text-white">Start watching</span> {startWatching.listTitle}</>}
-              labelColor="text-blue-400"
-              to={`/lists/${startWatching.listId}`}
-            />
-          )}
-          {almostDone && (
-            <SuggestionCard
-              movie={almostDone.movie}
-              label={<><span className="text-white">Almost done with</span> {almostDone.listTitle}</>}
-              sublabel={`${almostDone.remaining} ${almostDone.remaining === 1 ? 'movie' : 'movies'} left`}
-              labelColor="text-green-400"
-              to={`/lists/${almostDone.listId}`}
-            />
-          )}
-        </div>
-      )}
-
-      {newInLists && (
-        <SuggestionCard
-          movie={newInLists.movie}
-          label={<><span className="text-white">Just released</span> on {newInLists.listTitle}</>}
-          labelColor="text-pink-400"
-          to={`/movie/${newInLists.movie.tmdbId}`}
-        />
-      )}
-
       {/* Filter pills — wrap to a second row on narrow screens */}
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
