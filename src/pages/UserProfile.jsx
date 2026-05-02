@@ -4,19 +4,19 @@ import { useAuth } from '../context/AuthContext';
 import {
   getUserProfile, getUserAllProgress, getFriendship,
   sendFriendRequest, acceptFriendRequest,
-  getList, getAllWatchedMovies, getAllWatchedTmdbIds,
+  getList, getAllWatchedMovies,
   getPinnedLists, pinList, unpinList, sortLists,
   getListMovies, getWatchedMovies, getPrebuiltLists,
 } from '../lib/firestore';
 import ListCard from '../components/lists/ListCard';
 import SuggestionCard from '../components/movies/SuggestionCard';
-import WatchedPoster from '../components/movies/WatchedPoster';
+import ProfileReviews from '../components/profile/ProfileReviews';
 import ReviewModal from '../components/modal/ReviewModal';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import { ADMIN_UIDS } from '../lib/admin';
-import { PROFILE_NO_WATCHED, PROFILE_NO_LISTS, USER_NOT_FOUND } from '../lib/copy/empty';
+import { PROFILE_NO_LISTS, USER_NOT_FOUND } from '../lib/copy/empty';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, PIN_REACTIONS, FIRST_PIN } from '../lib/copy/lore';
 import ArcyStar from '../assets/images/arcy-poses/arcy-star.png';
@@ -56,7 +56,6 @@ export default function UserProfile() {
   const [requestedBy, setRequestedBy] = useState(null);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [myWatchedIds, setMyWatchedIds] = useState(new Set());
   const [selected, setSelected] = useState(null);
 
   const isOwner = user?.uid === uid;
@@ -70,12 +69,6 @@ export default function UserProfile() {
     if (!uid) return;
     getAllWatchedMovies(uid).then(setAllWatchedMovies);
   }, [uid]);
-
-  // Load current user's watched set for glow effect
-  useEffect(() => {
-    if (!user) return;
-    getAllWatchedTmdbIds(user.uid).then(setMyWatchedIds);
-  }, [user]);
 
   // Reset page when tab changes
   useEffect(() => {
@@ -371,38 +364,11 @@ export default function UserProfile() {
       {/* Content */}
       {canSeeContent && (
         <div className="space-y-6">
-          {/* Recently Watched */}
-          <div>
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-lg font-bold text-white">Recently Watched</h2>
-              <span className="text-sm text-gray-500">({allWatchedMovies.length})</span>
-              {allWatchedMovies.length > 0 && (
-                <Link
-                  to={`/watched/${uid}`}
-                  className="text-xs text-purple-400 hover:text-purple-300 ml-auto"
-                >
-                  View all →
-                </Link>
-              )}
-            </div>
-            {allWatchedMovies.length > 0 ? (
-              <div className="grid grid-cols-5 gap-2 items-start">
-                {allWatchedMovies.slice(0, 5).map((m) => (
-                  <WatchedPoster
-                    key={m.tmdbId}
-                    tmdbId={m.tmdbId}
-                    title={m.title}
-                    posterPath={m.posterPath}
-                    rating={m.rating}
-                    glow={myWatchedIds.has(m.tmdbId)}
-                    onClick={() => setSelected(m)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <NotFound title={PROFILE_NO_WATCHED.title} subtitle={PROFILE_NO_WATCHED.subtitle} scene={PROFILE_NO_WATCHED.scene} />
-            )}
-          </div>
+          <ProfileReviews
+            watchedMovies={allWatchedMovies}
+            onSelect={setSelected}
+            viewAllHref={`/watched/${uid}`}
+          />
 
           {/* Lists section — full Lists experience for owner, simple grid for friends */}
           <div className="space-y-6">
