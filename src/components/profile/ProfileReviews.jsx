@@ -15,7 +15,7 @@ export default function ProfileReviews({ watchedMovies, onSelect, viewAllHref })
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
-        <h2 className="text-2xl font-bold text-white">Reviews</h2>
+        <h2 className="text-2xl font-bold text-white">Recently Reviewed</h2>
         <span className="text-sm text-gray-500">({reviewed.length})</span>
         {viewAllHref && reviewed.length > 0 && (
           <Link

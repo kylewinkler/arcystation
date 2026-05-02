@@ -117,5 +117,11 @@ service cloud.firestore {
     match /moviePlots/{tmdbId} {
       allow read, write: if signedIn();
     }
+
+    // Aggregate site review stats per movie — recomputed by clients after any
+    // review write. Shared cache, any signed-in user reads/writes.
+    match /movieStats/{tmdbId} {
+      allow read, write: if signedIn();
+    }
   }
 }

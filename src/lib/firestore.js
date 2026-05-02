@@ -409,11 +409,13 @@ export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieDa
     entry.reactions = deleteField();
   }
   await setDoc(ref, entry, { merge: true });
+  await recomputeMovieStats(tmdbId).catch(() => {});
 }
 
 export async function unmarkWatchedStandalone(uid, tmdbId) {
   const docId = reviewDocId(uid, tmdbId);
   await deleteDoc(doc(db, 'reviews', docId));
+  await recomputeMovieStats(tmdbId).catch(() => {});
 
   // Cascade: remove per-list watched entries so lists don't keep checking the movie.
   const snap = await getDocs(query(
@@ -511,24 +513,108 @@ export async function getReactionsForReviews(reviewRefs) {
   return result;
 }
 
-// Aggregate site-wide stats for a movie. Filters out reviews with no rating.
-// Returns { count, scorePct, totalReviews } where scorePct = round(avgRating * 20).
-export async function getMovieReviewStats(tmdbId) {
+// ── Movie review aggregates ──
+// Per-movie aggregate doc at `movieStats/{tmdbId}` storing { scorePct, count,
+// totalReviews }. Recomputed by clients after every review write/delete (see
+// markWatchedStandalone / unmarkWatchedStandalone). Reads are cached in
+// memory per session to keep card grids cheap.
+
+const movieStatsCache = new Map();
+const EMPTY_STATS = { count: 0, scorePct: null, totalReviews: 0 };
+
+export async function recomputeMovieStats(tmdbId) {
+  const id = String(tmdbId);
   const snap = await getDocs(query(
     collection(db, 'reviews'),
-    where('tmdbId', '==', String(tmdbId))
+    where('tmdbId', '==', id)
   ));
   const all = snap.docs.map((d) => d.data());
   const rated = all.filter((r) => r.rating > 0);
-  if (rated.length === 0) {
-    return { count: 0, scorePct: null, totalReviews: all.length };
+  const stats = rated.length === 0
+    ? { count: 0, scorePct: null, totalReviews: all.length }
+    : {
+        count: rated.length,
+        scorePct: Math.round((rated.reduce((s, r) => s + r.rating, 0) / rated.length) * 20),
+        totalReviews: all.length,
+      };
+  await setDoc(doc(db, 'movieStats', id), { ...stats, updatedAt: serverTimestamp() });
+  movieStatsCache.set(id, stats);
+  return stats;
+}
+
+export async function getMovieReviewStats(tmdbId) {
+  const id = String(tmdbId);
+  if (movieStatsCache.has(id)) return movieStatsCache.get(id);
+  const snap = await getDoc(doc(db, 'movieStats', id));
+  const stats = snap.exists()
+    ? { count: snap.data().count || 0, scorePct: snap.data().scorePct ?? null, totalReviews: snap.data().totalReviews || 0 }
+    : EMPTY_STATS;
+  movieStatsCache.set(id, stats);
+  return stats;
+}
+
+// Batch-fetch stats for many tmdbIds. Returns Map<tmdbId, stats>. Cached
+// entries are returned without a fetch. Same total read cost as N getDocs
+// (1 read per movie that has a stats doc, plus uncached missing docs).
+export async function getMovieStatsBatch(tmdbIds) {
+  const result = new Map();
+  const need = [];
+  for (const raw of tmdbIds) {
+    const id = String(raw);
+    if (movieStatsCache.has(id)) {
+      result.set(id, movieStatsCache.get(id));
+    } else if (!need.includes(id)) {
+      need.push(id);
+    }
   }
-  const avg = rated.reduce((s, r) => s + r.rating, 0) / rated.length;
-  return {
-    count: rated.length,
-    scorePct: Math.round(avg * 20),
-    totalReviews: all.length,
-  };
+  if (need.length === 0) return result;
+
+  const snaps = await Promise.all(
+    need.map((id) => getDoc(doc(db, 'movieStats', id)))
+  );
+  snaps.forEach((snap, i) => {
+    const id = need[i];
+    const stats = snap.exists()
+      ? {
+          count: snap.data().count || 0,
+          scorePct: snap.data().scorePct ?? null,
+          totalReviews: snap.data().totalReviews || 0,
+        }
+      : EMPTY_STATS;
+    movieStatsCache.set(id, stats);
+    result.set(id, stats);
+  });
+  return result;
+}
+
+// One-time backfill: walks the entire reviews collection, groups by tmdbId,
+// and writes a movieStats doc for each unique tmdbId. Safe to re-run.
+export async function backfillMovieStats() {
+  const snap = await getDocs(collection(db, 'reviews'));
+  const byMovie = new Map();
+  snap.docs.forEach((d) => {
+    const r = d.data();
+    if (!r.tmdbId) return;
+    const id = String(r.tmdbId);
+    if (!byMovie.has(id)) byMovie.set(id, []);
+    byMovie.get(id).push(r);
+  });
+
+  let written = 0;
+  for (const [id, reviews] of byMovie) {
+    const rated = reviews.filter((r) => r.rating > 0);
+    const stats = rated.length === 0
+      ? { count: 0, scorePct: null, totalReviews: reviews.length }
+      : {
+          count: rated.length,
+          scorePct: Math.round((rated.reduce((s, r) => s + r.rating, 0) / rated.length) * 20),
+          totalReviews: reviews.length,
+        };
+    await setDoc(doc(db, 'movieStats', id), { ...stats, updatedAt: serverTimestamp() });
+    movieStatsCache.set(id, stats);
+    written++;
+  }
+  return { processed: snap.size, movies: written };
 }
 
 // Site-wide reviews for a movie, with reviewer profiles attached. Sorted by

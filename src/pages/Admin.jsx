@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { getUserLists } from '../lib/firestore';
+import { getUserLists, backfillMovieStats } from '../lib/firestore';
 
 import { ADMIN_UIDS } from '../lib/admin';
 import LoadingScreen from '../components/loading/Loading';
@@ -17,6 +17,8 @@ export default function Admin() {
   const [expandedUser, setExpandedUser] = useState(null);
   const [userLists, setUserLists] = useState({});
   const [loading, setLoading] = useState(true);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
 
   useEffect(() => {
     loadUsers();
@@ -63,6 +65,39 @@ export default function Admin() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Admin</h1>
         <span className="text-sm text-gray-500">{users.length} users</span>
+      </div>
+
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-white text-sm font-medium">Movie stats backfill</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Recomputes the aggregate score for every movie that has reviews. Safe to re-run.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (backfilling) return;
+              setBackfilling(true);
+              setBackfillResult(null);
+              try {
+                const r = await backfillMovieStats();
+                setBackfillResult(`Done. ${r.movies} movies updated from ${r.processed} reviews.`);
+              } catch (err) {
+                setBackfillResult(`Failed: ${err.message}`);
+              } finally {
+                setBackfilling(false);
+              }
+            }}
+            disabled={backfilling}
+            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0"
+          >
+            {backfilling ? 'Running…' : 'Run backfill'}
+          </button>
+        </div>
+        {backfillResult && (
+          <p className="text-xs text-gray-400 mt-2">{backfillResult}</p>
+        )}
       </div>
 
       <input

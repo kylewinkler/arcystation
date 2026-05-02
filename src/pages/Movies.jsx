@@ -9,6 +9,7 @@ import { DISCOVER_NO_RESULTS, WATCHED_NONE } from '../lib/copy/empty';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import WatchedPoster from '../components/movies/WatchedPoster';
 import QuickActionModal from '../components/modal/QuickActionModal';
+import MovieScoreBadge from '../components/movie/MovieScoreBadge';
 
 const DISCOVER_TABS = [
   { key: 'popular', label: 'Popular' },
@@ -410,9 +411,12 @@ function MovieGrid({ movies, watched, onQuickAction }) {
             <p className="text-xs text-gray-400 mt-1.5 truncate group-hover:text-white transition-colors">
               {m.title}
             </p>
-            {m.year && (
-              <p className="text-xs text-gray-600">{m.year}</p>
-            )}
+            <div className="flex items-center justify-between gap-1">
+              {m.year && (
+                <p className="text-xs text-gray-600">{m.year}</p>
+              )}
+              <MovieScoreBadge tmdbId={m.tmdbId} size="xs" showCount={false} />
+            </div>
           </button>
         );
       })}

@@ -12,6 +12,7 @@ import { discoverMovies, posterUrl } from '../lib/tmdb';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import StarRating from '../components/StarRating';
+import MovieScoreBadge from '../components/movie/MovieScoreBadge';
 import LoadingScreen from '../components/loading/Loading';
 import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 import NoComms from '../assets/images/arcy-scenes/no-comms.png';
@@ -258,6 +259,7 @@ export default function Home() {
                   <div className="w-full aspect-[2/3] rounded-lg bg-gray-800" />
                 )}
                 <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{m.title}</p>
+                <div className="mt-0.5"><MovieScoreBadge tmdbId={m.tmdbId} size="xs" /></div>
               </button>
             ))}
           </div>

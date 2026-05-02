@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { posterUrl } from '../../lib/tmdb';
 import StarRating from '../StarRating';
+import MovieScoreBadge from '../movie/MovieScoreBadge';
 
 export default function MovieCard({ movie, onRemove, watchedData, onToggleWatched, readonly, seenElsewhere, isFeatured, onToggleFeatured }) {
   const isWatched = !!watchedData;
@@ -55,6 +56,7 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
             {movie.title}{movie.year && <span className="text-gray-400"> ({movie.year})</span>}
           </Link>
         </p>
+        <div className="mt-0.5"><MovieScoreBadge tmdbId={movie.tmdbId} /></div>
         {isWatched && (
           <div className="inline-flex items-center gap-2 mt-0.5">
             <span className="text-xs text-purple-400">Watched</span>

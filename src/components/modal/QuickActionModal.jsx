@@ -4,6 +4,7 @@ import BaseModal from './Modal';
 import RatingModal from './RatingModal';
 import AddToListModal from './AddToListModal';
 import StarRating from '../StarRating';
+import MovieScoreBadge from '../movie/MovieScoreBadge';
 import { posterUrl } from '../../lib/tmdb';
 import {
   markWatchedStandalone, unmarkWatchedStandalone,
@@ -147,6 +148,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
         <div className="min-w-0">
           <p className="text-white font-medium truncate">{movie.title}</p>
           {movie.year && <p className="text-xs text-gray-500">{movie.year}</p>}
+          <div className="mt-0.5"><MovieScoreBadge tmdbId={movie.tmdbId} /></div>
         </div>
       </div>
 
