@@ -1,0 +1,121 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function listOwner(listId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/lists/$(listId)).data.createdBy == request.auth.uid;
+    }
+
+    // Users — created on first login by AuthContext.
+    // Public-readable so friend lookups, profile cards, and admin work.
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    // Per-user app settings (pinned lists).
+    match /userSettings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Lists (top-level).
+    match /lists/{listId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+
+      // Movies in a list — only the list owner can mutate.
+      match /movies/{tmdbId} {
+        allow read: if signedIn();
+        allow write: if listOwner(listId);
+      }
+    }
+
+    // List membership / per-user progress.
+    // Doc id format: `${uid}__${listId}`. The `uid` field on the doc is the source of truth.
+    match /listMembers/{memberId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid;
+      // List owner may delete any member doc for their list (cascading list cleanup).
+      // If the list itself is already gone, allow cleanup so orphans don't accumulate.
+      allow delete: if signedIn() && (
+        resource.data.uid == request.auth.uid ||
+        !exists(/databases/$(database)/documents/lists/$(resource.data.listId)) ||
+        listOwner(resource.data.listId)
+      );
+    }
+
+    // Per-list watched entries. Doc id: `${uid}__${listId}__${tmdbId}`.
+    match /listWatched/{watchedId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && (
+        resource.data.uid == request.auth.uid ||
+        !exists(/databases/$(database)/documents/lists/$(resource.data.listId)) ||
+        listOwner(resource.data.listId)
+      );
+    }
+
+    // Reviews (global "watched" + ratings + reactions).
+    // Doc id: `${uid}__${tmdbId}`. Owner controls the review; anyone signed in
+    // may add or remove ONLY their own reaction key under `reactions.<uid>`.
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && (
+        resource.data.uid == request.auth.uid ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']) &&
+          request.resource.data.get('reactions', {})
+            .diff(resource.data.get('reactions', {}))
+            .affectedKeys().hasOnly([request.auth.uid])
+        )
+      );
+    }
+
+    // Friendships. Doc id: sorted `${uid1}__${uid2}`.
+    match /friendships/{friendshipId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        request.auth.uid in [request.resource.data.uid1, request.resource.data.uid2] &&
+        request.resource.data.requestedBy == request.auth.uid;
+      allow update, delete: if signedIn() &&
+        request.auth.uid in [resource.data.uid1, resource.data.uid2];
+    }
+
+    // List invites — sender creates, recipient accepts/declines.
+    match /listInvites/{inviteId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.fromUid == request.auth.uid;
+      allow update: if signedIn() && resource.data.toUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // Notifications. Recipient reads/marks-read/deletes; anyone signed-in can
+    // create notifications addressed to others (friend requests, reactions, etc.).
+    match /notifications/{notifId} {
+      allow read: if signedIn() && resource.data.toUid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.fromUid == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.toUid == request.auth.uid;
+    }
+
+    // Wikipedia plot cache — shared cache, any signed-in user populates/reads.
+    match /moviePlots/{tmdbId} {
+      allow read, write: if signedIn();
+    }
+  }
+}

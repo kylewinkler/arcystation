@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { posterUrl } from '../../lib/tmdb';
 import StarRating from '../StarRating';
 import ReviewReactions from '../ReviewReactions';
@@ -92,6 +92,7 @@ export default function NotificationItem({ notification, profile, onFriendAction
   const isConsolidated = extraCount > 0;
   const [expanded, setExpanded] = useState(false);
   const expandable = isConsolidated && type === 'watched_movie' && items && items.length > 1;
+  const navigate = useNavigate();
 
   let icon, text, link;
 
@@ -333,8 +334,14 @@ export default function NotificationItem({ notification, profile, onFriendAction
   }
 
   return link ? (
-    <Link to={link} className="block hover:opacity-80 transition-opacity">
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(link)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(link); } }}
+      className="block hover:opacity-80 transition-opacity cursor-pointer"
+    >
       {header}
-    </Link>
+    </div>
   ) : header;
 }

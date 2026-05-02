@@ -1,4 +1,4 @@
-const CACHE = 'arcy-v1';
+const CACHE = 'arcy-v2';
 const APP_SHELL = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
@@ -24,13 +24,18 @@ self.addEventListener('fetch', e => {
 
   e.respondWith(
     caches.match(e.request).then(cached => {
-      const networkFetch = fetch(e.request).then(res => {
+      const fromNetwork = fetch(e.request).then(res => {
         if (res.ok) {
-          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+          const resClone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, resClone));
         }
         return res;
       });
-      return cached || networkFetch;
+      if (cached) {
+        fromNetwork.catch(() => {});
+        return cached;
+      }
+      return fromNetwork;
     })
   );
 });

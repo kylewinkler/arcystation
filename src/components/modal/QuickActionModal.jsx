@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BaseModal from './Modal';
 import RatingModal from './RatingModal';
+import AddToListModal from './AddToListModal';
 import StarRating from '../StarRating';
 import { posterUrl } from '../../lib/tmdb';
 import {
-  getUserLists, getListMovies, addMovieToList, removeMovieFromList,
-  createList, startList, markWatchedStandalone, unmarkWatchedStandalone,
+  markWatchedStandalone, unmarkWatchedStandalone,
   getWatchedInfo, getAllWatchedTmdbIds, notifyFriends,
 } from '../../lib/firestore';
 import { useToast } from '../../context/ToastContext';
@@ -24,19 +24,10 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
 
-  // Lists
-  const [ownedLists, setOwnedLists] = useState([]);
-  const [movieOnLists, setMovieOnLists] = useState(new Set());
-  const [newListName, setNewListName] = useState('');
-  const [creatingList, setCreatingList] = useState(false);
-  const [listsLoaded, setListsLoaded] = useState(false);
-
   // Reset state on open/close
   useEffect(() => {
     if (isOpen && movie) {
       setMode('menu');
-      setListsLoaded(false);
-      setNewListName('');
       // Check watched status
       getWatchedInfo(user.uid, movie.tmdbId).then((info) => {
         setWatchedData(info);
@@ -49,50 +40,6 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
   }, [isOpen, movie?.tmdbId]);
 
   const isWatched = !!watchedData;
-
-  async function loadOwnedLists() {
-    if (listsLoaded) return;
-    const lists = await getUserLists(user.uid);
-    setOwnedLists(lists);
-    const onLists = new Set();
-    await Promise.all(
-      lists.map(async (l) => {
-        const movies = await getListMovies(l.id);
-        if (movies.some((m) => m.tmdbId === movie.tmdbId)) {
-          onLists.add(l.id);
-        }
-      })
-    );
-    setMovieOnLists(onLists);
-    setListsLoaded(true);
-  }
-
-  async function handleToggleList(listId) {
-    if (movieOnLists.has(listId)) {
-      await removeMovieFromList(listId, movie.tmdbId);
-      setMovieOnLists((prev) => { const s = new Set(prev); s.delete(listId); return s; });
-    } else {
-      await addMovieToList(listId, getMovieData());
-      setMovieOnLists((prev) => new Set(prev).add(listId));
-    }
-  }
-
-  async function handleCreateNewList() {
-    const name = newListName.trim();
-    if (!name || creatingList) return;
-    setCreatingList(true);
-    try {
-      const listId = await createList({ title: name, description: '', createdBy: user.uid });
-      await addMovieToList(listId, getMovieData());
-      await startList(user.uid, listId);
-      notifyFriends(user.uid, 'created_list', { listId, listTitle: name });
-      setNewListName('');
-      loadOwnedLists();
-      setListsLoaded(false);
-    } finally {
-      setCreatingList(false);
-    }
-  }
 
   async function handleSaveRating() {
     await markWatchedStandalone(user.uid, movie.tmdbId, {
@@ -152,11 +99,6 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     setMode('rating');
   }
 
-  function openLists() {
-    loadOwnedLists();
-    setMode('lists');
-  }
-
   if (!isOpen || !movie) return null;
 
   // ── Rating mode: use RatingModal directly ──
@@ -176,67 +118,15 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     );
   }
 
-  // ── Lists mode ──
+  // ── Lists mode: delegate to AddToListModal ──
   if (mode === 'lists') {
     return (
-      <BaseModal isOpen onClose={onClose}>
-        <button
-          onClick={() => setMode('menu')}
-          className="text-sm text-gray-400 hover:text-white transition-colors"
-        >
-          ← Back
-        </button>
-        <h3 className="text-white font-medium">Add to list</h3>
-
-        {!listsLoaded ? (
-          <p className="text-sm text-gray-500">Loading lists...</p>
-        ) : ownedLists.length === 0 ? (
-          <p className="text-sm text-gray-500">No lists yet. Create one below.</p>
-        ) : (
-          <div className="max-h-48 overflow-y-auto -mx-6 px-6">
-            {ownedLists.map((l) => {
-              const isOn = movieOnLists.has(l.id);
-              return (
-                <button
-                  key={l.id}
-                  onClick={() => handleToggleList(l.id)}
-                  className="w-full flex items-center gap-3 px-2 py-2.5 hover:bg-gray-800 rounded-lg transition-colors text-left"
-                >
-                  <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${isOn ? 'bg-purple-600 border-purple-600' : 'border-gray-600'}`}>
-                    {isOn && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-                  <span className="text-sm text-white truncate">{l.title}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <form
-          onSubmit={(e) => { e.preventDefault(); handleCreateNewList(); }}
-          className="flex gap-2 pt-2 border-t border-gray-700"
-        >
-          <input
-            type="text"
-            value={newListName}
-            onChange={(e) => setNewListName(e.target.value)}
-            placeholder="New list name..."
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
-            autoFocus
-          />
-          <button
-            type="submit"
-            disabled={!newListName.trim() || creatingList}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-          >
-            Create
-          </button>
-        </form>
-      </BaseModal>
+      <AddToListModal
+        isOpen
+        onClose={onClose}
+        movie={movie}
+        user={user}
+      />
     );
   }
 
@@ -295,14 +185,14 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
 
       {/* Add to list */}
       <button
-        onClick={openLists}
+        onClick={() => setMode('lists')}
         className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 border border-gray-700 hover:border-purple-500 px-3 py-2.5 rounded-lg transition-colors"
       >
         <span className="text-lg leading-none">+</span>
         Add to list
       </button>
 
-      {/* View details */}
+      {/* View movie page */}
       <button
         onClick={() => { onClose(); navigate(`/movie/${movie.tmdbId}`); }}
         className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-3 py-2.5 rounded-lg transition-colors"
@@ -310,7 +200,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" />
         </svg>
-        View details
+        Go To Movie
       </button>
     </BaseModal>
   );

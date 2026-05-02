@@ -11,42 +11,48 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const snap = await getDoc(userRef);
-        if (!snap.exists()) {
-          await setDoc(userRef, {
+      try {
+        if (firebaseUser) {
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const snap = await getDoc(userRef);
+          if (!snap.exists()) {
+            await setDoc(userRef, {
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              email: firebaseUser.email,
+              createdAt: serverTimestamp(),
+            });
+          } else {
+            const stored = snap.data();
+            if (
+              stored.photoURL !== firebaseUser.photoURL ||
+              stored.displayName !== firebaseUser.displayName
+            ) {
+              await setDoc(
+                userRef,
+                {
+                  displayName: firebaseUser.displayName,
+                  photoURL: firebaseUser.photoURL,
+                },
+                { merge: true }
+              );
+            }
+          }
+          setUser({
+            uid: firebaseUser.uid,
             displayName: firebaseUser.displayName,
             photoURL: firebaseUser.photoURL,
             email: firebaseUser.email,
-            createdAt: serverTimestamp(),
           });
         } else {
-          const stored = snap.data();
-          if (
-            stored.photoURL !== firebaseUser.photoURL ||
-            stored.displayName !== firebaseUser.displayName
-          ) {
-            await setDoc(
-              userRef,
-              {
-                displayName: firebaseUser.displayName,
-                photoURL: firebaseUser.photoURL,
-              },
-              { merge: true }
-            );
-          }
+          setUser(null);
         }
-        setUser({
-          uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          email: firebaseUser.email,
-        });
-      } else {
+      } catch (err) {
+        console.error('Auth state sync failed:', err);
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
   }, []);
 

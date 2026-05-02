@@ -511,6 +511,43 @@ export async function getReactionsForReviews(reviewRefs) {
   return result;
 }
 
+// Aggregate site-wide stats for a movie. Filters out reviews with no rating.
+// Returns { count, scorePct, totalReviews } where scorePct = round(avgRating * 20).
+export async function getMovieReviewStats(tmdbId) {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    where('tmdbId', '==', String(tmdbId))
+  ));
+  const all = snap.docs.map((d) => d.data());
+  const rated = all.filter((r) => r.rating > 0);
+  if (rated.length === 0) {
+    return { count: 0, scorePct: null, totalReviews: all.length };
+  }
+  const avg = rated.reduce((s, r) => s + r.rating, 0) / rated.length;
+  return {
+    count: rated.length,
+    scorePct: Math.round(avg * 20),
+    totalReviews: all.length,
+  };
+}
+
+// Site-wide reviews for a movie, with reviewer profiles attached. Sorted by
+// watchedAt desc client-side (no composite index needed).
+export async function getMovieReviews(tmdbId) {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    where('tmdbId', '==', String(tmdbId))
+  ));
+  const reviews = snap.docs.map((d) => d.data());
+  if (reviews.length === 0) return [];
+
+  const profiles = await Promise.all(reviews.map((r) => getUserProfile(r.uid)));
+  return reviews
+    .map((review, i) => ({ review, profile: profiles[i] }))
+    .filter((r) => r.profile)
+    .sort((a, b) => (b.review.watchedAt?.seconds || 0) - (a.review.watchedAt?.seconds || 0));
+}
+
 export async function getFriendReviewsForMovie(uid, tmdbId) {
   const friendUids = await getFriends(uid);
   if (friendUids.length === 0) return [];
