@@ -12,7 +12,7 @@ import { discoverMovies, posterUrl } from '../lib/tmdb';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import StarRating from '../components/StarRating';
-import MovieScoreBadge from '../components/movie/MovieScoreBadge';
+import MoviePosterTile from '../components/movies/MoviePosterTile';
 import LoadingScreen from '../components/loading/Loading';
 import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
 import NoComms from '../assets/images/arcy-scenes/no-comms.png';
@@ -242,25 +242,14 @@ export default function Home() {
             <h2 className="text-lg font-bold text-white">Popular Right Now</h2>
             <Link to="/movies" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
           </div>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-5 gap-3">
             {popularMovies.slice(0, 5).map((m) => (
-              <button
+              <MoviePosterTile
                 key={m.tmdbId}
+                movie={m}
+                isSeen={watchedIds.has(m.tmdbId)}
                 onClick={() => setQuickActionMovie(m)}
-                className="group text-left"
-              >
-                {m.posterPath ? (
-                  <img
-                    src={posterUrl(m.posterPath, 'w185')}
-                    alt=""
-                    className="w-full aspect-[2/3] rounded-lg object-cover group-hover:ring-2 ring-purple-500 transition-all"
-                  />
-                ) : (
-                  <div className="w-full aspect-[2/3] rounded-lg bg-gray-800" />
-                )}
-                <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{m.title}</p>
-                <div className="mt-0.5"><MovieScoreBadge tmdbId={m.tmdbId} size="xs" /></div>
-              </button>
+              />
             ))}
           </div>
         </div>

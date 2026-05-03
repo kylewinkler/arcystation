@@ -10,7 +10,7 @@ function scoreColor(pct) {
 
 // Tiny self-fetching badge for the site review %. Uses the cached helper, so
 // many badges on one page share reads. Renders nothing if there's no rating.
-export default function MovieScoreBadge({ tmdbId, size = 'sm', showCount = true }) {
+export default function MovieScoreBadge({ tmdbId, size = 'sm', showCount = false }) {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {

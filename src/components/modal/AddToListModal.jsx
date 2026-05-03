@@ -4,8 +4,10 @@ import {
   getUserLists, getListMovies, addMovieToList, removeMovieFromList,
   createList, startList, notifyFriends,
 } from '../../lib/firestore';
+import { useToast } from '../../context/ToastContext';
 
 export default function AddToListModal({ isOpen, onClose, movie, user, onChanged }) {
+  const { showToast } = useToast();
   const [ownedLists, setOwnedLists] = useState([]);
   const [movieOnLists, setMovieOnLists] = useState(new Set());
   const [newListName, setNewListName] = useState('');
@@ -49,12 +51,16 @@ export default function AddToListModal({ isOpen, onClose, movie, user, onChanged
   }
 
   async function handleToggleList(listId) {
+    const list = ownedLists.find((l) => l.id === listId);
+    const title = list?.title || 'list';
     if (movieOnLists.has(listId)) {
       await removeMovieFromList(listId, movie.tmdbId);
       setMovieOnLists((prev) => { const s = new Set(prev); s.delete(listId); return s; });
+      showToast({ message: `Removed from "${title}"`, duration: 1500 });
     } else {
       await addMovieToList(listId, getMovieData());
       setMovieOnLists((prev) => new Set(prev).add(listId));
+      showToast({ message: `Added to "${title}"`, duration: 1500 });
     }
     onChanged?.();
   }
@@ -130,6 +136,14 @@ export default function AddToListModal({ isOpen, onClose, movie, user, onChanged
           Create
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="w-full bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+      >
+        Done
+      </button>
     </BaseModal>
   );
 }

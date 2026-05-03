@@ -1,15 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { searchMovies, discoverMovies, getGenreList, getRecommendations, posterUrl } from '../lib/tmdb';
+import { searchMovies, discoverMovies, getGenreList, getRecommendations } from '../lib/tmdb';
 import { getAllWatchedTmdbIds, getAllWatchedMovies } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import { DISCOVER_NO_RESULTS, WATCHED_NONE } from '../lib/copy/empty';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import WatchedPoster from '../components/movies/WatchedPoster';
+import MoviePosterTile from '../components/movies/MoviePosterTile';
 import QuickActionModal from '../components/modal/QuickActionModal';
-import MovieScoreBadge from '../components/movie/MovieScoreBadge';
 
 const DISCOVER_TABS = [
   { key: 'popular', label: 'Popular' },
@@ -385,41 +385,14 @@ export default function Movies() {
 function MovieGrid({ movies, watched, onQuickAction }) {
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-      {movies.map((m) => {
-        const isSeen = watched.has(m.tmdbId);
-        return (
-          <button
-            key={m.tmdbId}
-            onClick={() => onQuickAction(m)}
-            className="group relative text-left"
-          >
-            {m.posterPath ? (
-              <img
-                src={posterUrl(m.posterPath, 'w185')}
-                alt=""
-                className={`w-full aspect-[2/3] rounded-lg object-cover transition-all group-hover:ring-2 ring-purple-500 ${
-                  isSeen ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''
-                }`}
-              />
-            ) : (
-              <div className={`w-full aspect-[2/3] rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-600 ${
-                isSeen ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''
-              }`}>
-                No img
-              </div>
-            )}
-            <p className="text-xs text-gray-400 mt-1.5 truncate group-hover:text-white transition-colors">
-              {m.title}
-            </p>
-            <div className="flex items-center justify-between gap-1">
-              {m.year && (
-                <p className="text-xs text-gray-600">{m.year}</p>
-              )}
-              <MovieScoreBadge tmdbId={m.tmdbId} size="xs" showCount={false} />
-            </div>
-          </button>
-        );
-      })}
+      {movies.map((m) => (
+        <MoviePosterTile
+          key={m.tmdbId}
+          movie={m}
+          isSeen={watched.has(m.tmdbId)}
+          onClick={() => onQuickAction(m)}
+        />
+      ))}
     </div>
   );
 }
