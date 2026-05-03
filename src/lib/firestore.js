@@ -618,7 +618,9 @@ export async function backfillMovieStats() {
 }
 
 // Site-wide reviews for a movie, with reviewer profiles attached. Sorted by
-// watchedAt desc client-side (no composite index needed).
+// watchedAt desc client-side (no composite index needed). Reviews whose user
+// doc is missing get a stub profile so the count stays consistent with
+// movieStats (which doesn't filter by profile existence).
 export async function getMovieReviews(tmdbId) {
   const snap = await getDocs(query(
     collection(db, 'reviews'),
@@ -629,9 +631,36 @@ export async function getMovieReviews(tmdbId) {
 
   const profiles = await Promise.all(reviews.map((r) => getUserProfile(r.uid)));
   return reviews
-    .map((review, i) => ({ review, profile: profiles[i] }))
-    .filter((r) => r.profile)
+    .map((review, i) => ({
+      review,
+      profile: profiles[i] || { uid: review.uid, displayName: 'Unknown', photoURL: null },
+    }))
     .sort((a, b) => (b.review.watchedAt?.seconds || 0) - (a.review.watchedAt?.seconds || 0));
+}
+
+// Most recent reviews across the whole site, with reviewer profiles + movie
+// stats attached. Powers the public "Recent Reviews" strip on Home.
+export async function getRecentSiteReviews(max = 12) {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    orderBy('watchedAt', 'desc'),
+    limit(max)
+  ));
+  const reviews = snap.docs.map((d) => d.data());
+  if (reviews.length === 0) return [];
+
+  const uniqueTmdbIds = [...new Set(reviews.map((r) => String(r.tmdbId)))];
+  const [profiles, statsList] = await Promise.all([
+    Promise.all(reviews.map((r) => getUserProfile(r.uid))),
+    Promise.all(uniqueTmdbIds.map((id) => getMovieReviewStats(id).catch(() => null))),
+  ]);
+  const statsByTmdb = Object.fromEntries(uniqueTmdbIds.map((id, i) => [id, statsList[i]]));
+
+  return reviews.map((review, i) => ({
+    review,
+    profile: profiles[i] || { uid: review.uid, displayName: 'Unknown', photoURL: null },
+    stats: statsByTmdb[String(review.tmdbId)] || null,
+  }));
 }
 
 export async function getFriendReviewsForMovie(uid, tmdbId) {
@@ -832,6 +861,11 @@ export async function getSuggestedFriends(uid) {
 export async function getUserProfile(uid) {
   const snap = await getDoc(doc(db, 'users', uid));
   return snap.exists() ? { uid: snap.id, ...snap.data() } : null;
+}
+
+// Owner-only profile patch — used today for the privacy toggle.
+export async function updateUserProfile(uid, patch) {
+  await updateDoc(doc(db, 'users', uid), patch);
 }
 
 // ── User Settings (pinned lists etc.) ──

@@ -21,6 +21,7 @@ import PlotModal from '../components/modal/PlotModal';
 import FriendReviewsCarousel from '../components/FriendReviewsCarousel';
 import MovieActionsMenu from '../components/movie/MovieActionsMenu';
 import SiteReviews from '../components/movie/SiteReviews';
+import LoginPrompt from '../components/auth/LoginPrompt';
 
 export default function MovieDetail() {
   const { tmdbId } = useParams();
@@ -39,8 +40,16 @@ export default function MovieDetail() {
   const [plotModal, setPlotModal] = useState(false);
   const [reviewStats, setReviewStats] = useState(null);
   const [reviewsKey, setReviewsKey] = useState(0); // bump to force SiteReviews refetch
+  const [loginPromptMessage, setLoginPromptMessage] = useState(null);
   const reviewsRef = useRef(null);
   const { showToast } = useToast();
+
+  function requireAuth(handler, message) {
+    return () => {
+      if (user) handler();
+      else setLoginPromptMessage(message || 'Sign in to continue.');
+    };
+  }
 
   useEffect(() => {
     loadMovie();
@@ -197,14 +206,12 @@ export default function MovieDetail() {
             <h1 className="text-2xl font-bold text-white">
               {movie.title} {movie.year && <span className="text-gray-400 font-normal">({movie.year})</span>}
             </h1>
-            {user && (
-              <MovieActionsMenu
-                isWatched={isWatched}
-                onViewPlot={() => setPlotModal(true)}
-                onAddToList={() => setAddListModal(true)}
-                onMarkWatched={openMarkWatchedModal}
-              />
-            )}
+            <MovieActionsMenu
+              isWatched={isWatched}
+              onViewPlot={() => setPlotModal(true)}
+              onAddToList={requireAuth(() => setAddListModal(true), 'Sign in to add movies to your lists.')}
+              onMarkWatched={requireAuth(openMarkWatchedModal, 'Sign in to rate movies.')}
+            />
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             {genres.map((g) => (
@@ -229,9 +236,9 @@ export default function MovieDetail() {
               </span>
             </button>
           ) : (
-            user && !isWatched && (
+            !isWatched && (
               <button
-                onClick={openMarkWatchedModal}
+                onClick={requireAuth(openMarkWatchedModal, 'Sign in to be the first to rate.')}
                 className="text-sm text-gray-500 mt-1 hover:text-purple-400 transition-colors italic"
               >
                 Be the first to rate
@@ -369,6 +376,12 @@ export default function MovieDetail() {
         tmdbId={tmdbId}
         title={movie.title}
         year={movie.year}
+      />
+
+      <LoginPrompt
+        isOpen={!!loginPromptMessage}
+        onClose={() => setLoginPromptMessage(null)}
+        message={loginPromptMessage || undefined}
       />
     </div>
   );

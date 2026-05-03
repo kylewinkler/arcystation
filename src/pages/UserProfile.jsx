@@ -60,6 +60,7 @@ export default function UserProfile() {
 
   const isOwner = user?.uid === uid;
   const tab = searchParams.get('tab') || 'all';
+  const isPublic = profile?.isPublic !== false;
 
   useEffect(() => {
     loadProfile();
@@ -104,6 +105,13 @@ export default function UserProfile() {
       setFriendshipStatus(friendship?.status || null);
       setRequestedBy(friendship?.requestedBy || null);
       setIsFriend(friendship?.status === 'accepted');
+    }
+
+    // Anonymous viewers can read this user's reviews (loaded separately) but
+    // not their list memberships — skip the lists-grid fetches entirely.
+    if (!user) {
+      setLoading(false);
+      return;
     }
 
     const [allProgress, pinned, prebuiltLists] = await Promise.all([
@@ -280,7 +288,7 @@ export default function UserProfile() {
     return <NotFound title={USER_NOT_FOUND.title} subtitle={USER_NOT_FOUND.subtitle} scene={USER_NOT_FOUND.scene} />;
   }
 
-  const canSeeContent = isOwner || isFriend;
+  const canSeeContent = isOwner || isFriend || isPublic;
 
   // Filtered list — owner can switch tabs; non-owner sees a single combined
   // grid of all lists the profile owner is on.
@@ -321,13 +329,22 @@ export default function UserProfile() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <ProfileHeader profile={profile} isOwner={isOwner} isAdmin={ADMIN_UIDS.includes(user?.uid)} />
+      <ProfileHeader
+        profile={profile}
+        isOwner={isOwner}
+        isAdmin={ADMIN_UIDS.includes(user?.uid)}
+        onProfileChange={setProfile}
+      />
 
-      {/* Not friends */}
+      {/* Private profile placeholder — shown to non-friends (and to logged-out
+          viewers) when the profile owner has flipped privacy off. */}
       {!canSeeContent && (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
-          <p className="text-gray-400">Add this user as a friend to see their lists.</p>
-          {friendshipStatus === 'pending' && requestedBy === uid ? (
+          <p className="text-gray-400">This profile is private.</p>
+          {!user && (
+            <p className="text-sm text-gray-500 mt-2">Sign in to send a friend request.</p>
+          )}
+          {user && friendshipStatus === 'pending' && requestedBy === uid ? (
             <button
               onClick={async () => {
                 setSending(true);
@@ -342,9 +359,9 @@ export default function UserProfile() {
             >
               {sending ? 'Accepting...' : 'Accept Friend Request'}
             </button>
-          ) : friendshipStatus === 'pending' ? (
+          ) : user && friendshipStatus === 'pending' ? (
             <p className="text-sm text-gray-500 mt-2">Friend request pending</p>
-          ) : (
+          ) : user ? (
             <button
               onClick={async () => {
                 setSending(true);
@@ -354,6 +371,45 @@ export default function UserProfile() {
               }}
               disabled={sending}
               className="mt-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {sending ? 'Sending...' : 'Add Friend'}
+            </button>
+          ) : null}
+        </div>
+      )}
+
+      {/* Logged-in non-friend viewing a public profile — small, non-blocking
+          friend-request CTA above the content. */}
+      {canSeeContent && !isOwner && !isFriend && user && (
+        <div className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+          <p className="text-sm text-gray-400">You're not friends yet.</p>
+          {friendshipStatus === 'pending' && requestedBy === uid ? (
+            <button
+              onClick={async () => {
+                setSending(true);
+                await acceptFriendRequest(user.uid, uid);
+                setIsFriend(true);
+                setFriendshipStatus('accepted');
+                setSending(false);
+                loadProfile();
+              }}
+              disabled={sending}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            >
+              {sending ? 'Accepting...' : 'Accept Request'}
+            </button>
+          ) : friendshipStatus === 'pending' ? (
+            <span className="text-xs text-gray-500">Request pending</span>
+          ) : (
+            <button
+              onClick={async () => {
+                setSending(true);
+                await sendFriendRequest(user.uid, uid);
+                setFriendshipStatus('pending');
+                setSending(false);
+              }}
+              disabled={sending}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             >
               {sending ? 'Sending...' : 'Add Friend'}
             </button>
@@ -370,7 +426,10 @@ export default function UserProfile() {
             viewAllHref={`/watched/${uid}`}
           />
 
-          {/* Lists section — full Lists experience for owner, simple grid for friends */}
+          {/* Lists section — full Lists experience for owner, simple grid for
+              friends and logged-in public viewers. Anonymous viewers can't
+              read listMembers so the section is hidden entirely for them. */}
+          {user && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Lists</h2>
@@ -472,12 +531,13 @@ export default function UserProfile() {
               </>
             )}
           </div>
+          )}
         </div>
       )}
 
       {isOwner && (
         <button
-          onClick={async () => { await logout(); navigate('/login'); }}
+          onClick={async () => { await logout(); navigate('/'); }}
           className="w-full text-sm text-gray-500 hover:text-red-400 border border-gray-700 px-3 py-2 rounded-lg transition-colors"
         >
           Sign out

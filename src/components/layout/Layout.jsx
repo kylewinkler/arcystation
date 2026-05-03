@@ -1,4 +1,4 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { searchMovies, posterUrl } from '../../lib/tmdb';
@@ -8,7 +8,8 @@ import QuickActionModal from '../modal/QuickActionModal';
 import ArcyPop from '../../assets/images/arcy-poses/arcy-popcorn.png';
 
 export default function Layout({ children }) {
-  const { user } = useAuth();
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -67,7 +68,11 @@ export default function Layout({ children }) {
   }
 
   function handleResultClick(movie) {
-    setQuickActionMovie(movie);
+    if (user) {
+      setQuickActionMovie(movie);
+    } else {
+      navigate(`/movie/${movie.tmdbId}`);
+    }
     closeSearch();
   }
 
@@ -90,7 +95,7 @@ export default function Layout({ children }) {
         />
           Arcy Station
         </Link>
-          {user && !searchOpen && (
+          {!searchOpen && (
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setSearchOpen(true)}
@@ -106,24 +111,35 @@ export default function Layout({ children }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
                 </svg>
               </NavLink>
-              <NavLink to="/friends" className={({ isActive }) => `relative transition-colors ${isActive ? 'text-purple-400' : 'text-gray-300 hover:text-white'}`} aria-label="Friends">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <NotificationBadge />
-              </NavLink>
-              <NavLink to={`/user/${user.uid}`} className={({ isActive }) => `flex items-center gap-2 text-sm transition-colors ${isActive ? 'text-purple-400' : 'text-gray-300 hover:text-white'}`}>
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
-                    {user.displayName?.[0] || '?'}
-                  </div>
-                )}
-              </NavLink>
+              {user ? (
+                <>
+                  <NavLink to="/friends" className={({ isActive }) => `relative transition-colors ${isActive ? 'text-purple-400' : 'text-gray-300 hover:text-white'}`} aria-label="Friends">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <NotificationBadge />
+                  </NavLink>
+                  <NavLink to={`/user/${user.uid}`} className={({ isActive }) => `flex items-center gap-2 text-sm transition-colors ${isActive ? 'text-purple-400' : 'text-gray-300 hover:text-white'}`}>
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
+                        {user.displayName?.[0] || '?'}
+                      </div>
+                    )}
+                  </NavLink>
+                </>
+              ) : (
+                <button
+                  onClick={() => login().catch((err) => console.error('Sign-in failed:', err))}
+                  className="text-sm font-medium text-white bg-purple-600 hover:bg-purple-500 transition-colors rounded-lg px-3 py-1.5"
+                >
+                  Sign In
+                </button>
+              )}
             </div>
           )}
-          {user && searchOpen && (
+          {searchOpen && (
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <input
                 ref={inputRef}

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { searchMovies, discoverMovies, getGenreList, getRecommendations } from '../lib/tmdb';
 import { getAllWatchedTmdbIds, getAllWatchedMovies } from '../lib/firestore';
@@ -29,6 +29,7 @@ function getSavedState() {
 
 export default function Movies() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialGenre = searchParams.get('genre') || '';
   const initialSection = searchParams.get('section') || 'discover';
@@ -60,6 +61,14 @@ export default function Movies() {
 
   // ── Quick action modal ──
   const [quickActionMovie, setQuickActionMovie] = useState(null);
+
+  function handleMovieClick(movie) {
+    if (user) {
+      setQuickActionMovie(movie);
+    } else {
+      navigate(`/movie/${movie.tmdbId}`);
+    }
+  }
 
   // ── Watched preview state (recent 18) ──
   const [watchedPreview, setWatchedPreview] = useState([]);
@@ -226,28 +235,30 @@ export default function Movies() {
     <div className="max-w-2xl mx-auto space-y-5">
       <h1 className="text-2xl font-bold text-white">Movies</h1>
 
-      {/* Top-level tabs */}
-      <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
-        <button
-          onClick={() => switchSection('discover')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-            section === 'discover' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          Discover
-        </button>
-        <button
-          onClick={() => switchSection('watched')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-            section === 'watched' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          Watched
-          {watched.size > 0 && (
-            <span className="ml-1.5 text-xs text-purple-200/60">{watched.size}</span>
-          )}
-        </button>
-      </div>
+      {/* Top-level tabs — Watched is logged-in-only */}
+      {user && (
+        <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
+          <button
+            onClick={() => switchSection('discover')}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              section === 'discover' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Discover
+          </button>
+          <button
+            onClick={() => switchSection('watched')}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              section === 'watched' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Watched
+            {watched.size > 0 && (
+              <span className="ml-1.5 text-xs text-purple-200/60">{watched.size}</span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* ════════ DISCOVER SECTION ════════ */}
       {section === 'discover' && (
@@ -311,7 +322,7 @@ export default function Movies() {
             <NotFound title={DISCOVER_NO_RESULTS.title} subtitle={DISCOVER_NO_RESULTS.subtitle} scene={DISCOVER_NO_RESULTS.scene} />
           ) : (
             <>
-              <MovieGrid movies={discoverMovies_} watched={watched} onQuickAction={setQuickActionMovie} />
+              <MovieGrid movies={discoverMovies_} watched={watched} onQuickAction={handleMovieClick} />
               {!discoverSearch.trim() && page < totalPages && (
                 <div className="text-center pt-2 pb-4">
                   <button
@@ -368,15 +379,17 @@ export default function Movies() {
         </>
       )}
 
-      {/* Quick action modal */}
-      <QuickActionModal
-        isOpen={!!quickActionMovie}
-        onClose={() => setQuickActionMovie(null)}
-        movie={quickActionMovie}
-        user={user}
-        watched={watched}
-        setWatched={setWatched}
-      />
+      {/* Quick action modal — only meaningful for logged-in users */}
+      {user && (
+        <QuickActionModal
+          isOpen={!!quickActionMovie}
+          onClose={() => setQuickActionMovie(null)}
+          movie={quickActionMovie}
+          user={user}
+          watched={watched}
+          setWatched={setWatched}
+        />
+      )}
     </div>
   );
 }

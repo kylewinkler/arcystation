@@ -32,25 +32,23 @@ export default function App() {
           <Route
             path="*"
             element={
-              <ProtectedRoute>
-                <Layout>
-                  <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/lists" element={<Lists />} />
-                    <Route path="/lists/new" element={<CreateList />} />
-                    <Route path="/lists/:id" element={<ListDetail />} />
-                    <Route path="/lists/:id/edit" element={<EditList />} />
-                    <Route path="/progress/:uid/:listId" element={<ProgressRedirect />} />
-                    <Route path="/user/:uid" element={<UserProfile />} />
-                    <Route path="/friends" element={<Friends />} />
-                    <Route path="/movies" element={<Movies />} />
-                    <Route path="/movie/:tmdbId" element={<MovieDetail />} />
-                    <Route path="/watched/:uid/:year?" element={<WatchedByYear />} />
-                    <Route path="/admin" element={<Admin />} />
-                    <Route path="*" element={<NotFoundPage />} />
-                  </Routes>
-                </Layout>
-              </ProtectedRoute>
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/movies" element={<Movies />} />
+                  <Route path="/movie/:tmdbId" element={<MovieDetail />} />
+                  <Route path="/user/:uid" element={<UserProfile />} />
+                  <Route path="/watched/:uid/:year?" element={<WatchedByYear />} />
+                  <Route path="/lists" element={<ProtectedRoute><Lists /></ProtectedRoute>} />
+                  <Route path="/lists/new" element={<ProtectedRoute><CreateList /></ProtectedRoute>} />
+                  <Route path="/lists/:id" element={<ProtectedRoute><ListDetail /></ProtectedRoute>} />
+                  <Route path="/lists/:id/edit" element={<ProtectedRoute><EditList /></ProtectedRoute>} />
+                  <Route path="/progress/:uid/:listId" element={<ProtectedRoute><ProgressRedirect /></ProtectedRoute>} />
+                  <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
+                  <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Layout>
             }
           />
         </Routes>

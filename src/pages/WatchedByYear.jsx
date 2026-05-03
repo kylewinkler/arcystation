@@ -89,6 +89,27 @@ export default function WatchedByYear() {
     return <LoadingScreen/>;
   }
 
+  if (!profile) {
+    return <NotFound title="User not found" subtitle="" scene={null} />;
+  }
+
+  // Privacy gate — only owners and the profile owner themselves see private
+  // archives. Friends would also see, but checking friendship here would mean
+  // an extra round-trip; we keep it simple: profiles flipped to private hide
+  // their watched archive from non-owners.
+  const isProfilePublic = profile.isPublic !== false;
+  if (!isProfilePublic && !isOwner) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <BackButton to={`/user/${uid}`} label={`Back to ${profile.displayName}`} />
+        <ProfileHeader profile={profile} isOwner={false} />
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
+          <p className="text-gray-400">This profile is private.</p>
+        </div>
+      </div>
+    );
+  }
+
   const yearLabel = selectedYear === 'all' ? '' : ` ${selectedYear}`;
 
   return (

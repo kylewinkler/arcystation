@@ -20,6 +20,7 @@ export function AuthProvider({ children }) {
               displayName: firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,
               email: firebaseUser.email,
+              isPublic: true,
               createdAt: serverTimestamp(),
             });
           } else {

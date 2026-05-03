@@ -17,9 +17,11 @@ service cloud.firestore {
     }
 
     // Users — created on first login by AuthContext.
-    // Public-readable so friend lookups, profile cards, and admin work.
+    // Publicly readable so reviewer cards, profile pages, and friend lookups
+    // work for anonymous visitors. The `isPublic` field on the doc gates the
+    // profile page UI, not the doc itself.
     match /users/{userId} {
-      allow read: if signedIn();
+      allow read: if true;
       allow create, update: if isOwner(userId);
       allow delete: if false;
     }
@@ -72,8 +74,9 @@ service cloud.firestore {
     // Reviews (global "watched" + ratings + reactions).
     // Doc id: `${uid}__${tmdbId}`. Owner controls the review; anyone signed in
     // may add or remove ONLY their own reaction key under `reactions.<uid>`.
+    // Publicly readable so anonymous visitors see SiteReviews and the home feed.
     match /reviews/{reviewId} {
-      allow read: if signedIn();
+      allow read: if true;
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
       allow update: if signedIn() && (
@@ -113,15 +116,18 @@ service cloud.firestore {
       allow update, delete: if signedIn() && resource.data.toUid == request.auth.uid;
     }
 
-    // Wikipedia plot cache — shared cache, any signed-in user populates/reads.
+    // Wikipedia plot cache — shared cache, public-readable so anonymous
+    // movie pages render plots; only signed-in users populate it.
     match /moviePlots/{tmdbId} {
-      allow read, write: if signedIn();
+      allow read: if true;
+      allow write: if signedIn();
     }
 
     // Aggregate site review stats per movie — recomputed by clients after any
-    // review write. Shared cache, any signed-in user reads/writes.
+    // review write. Public-readable for anonymous movie pages; signed-in writes.
     match /movieStats/{tmdbId} {
-      allow read, write: if signedIn();
+      allow read: if true;
+      allow write: if signedIn();
     }
   }
 }
