@@ -182,6 +182,7 @@ export default function MovieDetail() {
   }
 
   const directors = fullDetails.credits?.crew?.filter((c) => c.job === 'Director') || [];
+  const cast = (fullDetails.credits?.cast || []).slice(0, 10);
   const genres = fullDetails.genres || [];
   const runtime = fullDetails.runtime;
   const recommendations = fullDetails.recommendations?.results?.slice(0, 6) || [];
@@ -255,6 +256,11 @@ export default function MovieDetail() {
       </div>
       {movie.overview && (
         <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
+      )}
+      {cast.length > 0 && (
+        <p className="text-sm text-gray-400">
+          Starring <span className="text-white">{cast.map((c) => c.name).join(', ')}</span>
+        </p>
       )}
 
       {(() => {
