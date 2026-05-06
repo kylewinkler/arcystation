@@ -257,11 +257,6 @@ export default function MovieDetail() {
       {movie.overview && (
         <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
       )}
-      {cast.length > 0 && (
-        <p className="text-sm text-gray-400">
-          Starring <span className="text-white">{cast.map((c) => c.name).join(', ')}</span>
-        </p>
-      )}
 
       {(() => {
         const myReview = standaloneWatched;
@@ -321,6 +316,31 @@ export default function MovieDetail() {
         stats={reviewStats}
         refreshKey={reviewsKey}
       />
+
+      {cast.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-gray-400 mb-2">Cast</h2>
+          <div className="space-y-2">
+            {cast.map((c) => (
+              <Link
+                key={c.id}
+                to={`/actor/${c.id}`}
+                className="flex items-center gap-3 bg-gray-900 border border-gray-800 hover:border-purple-500 rounded-lg px-3 py-2 transition-colors"
+              >
+                {c.profile_path ? (
+                  <img src={posterUrl(c.profile_path, 'w92')} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gray-700 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-white text-sm truncate">{c.name}</p>
+                  {c.character && <p className="text-gray-500 text-xs truncate">as {c.character}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {recommendations.length > 0 && (
         <div>

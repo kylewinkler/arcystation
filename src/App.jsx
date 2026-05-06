@@ -14,6 +14,7 @@ import PublicShare from './pages/PublicShare';
 import Admin from './pages/Admin';
 import Movies from './pages/Movies';
 import MovieDetail from './pages/MovieDetail';
+import ActorDetail from './pages/ActorDetail';
 import WatchedByYear from './pages/WatchedByYear';
 import Lists from './pages/Lists';
 import Friends from './pages/Friends';
@@ -37,6 +38,7 @@ export default function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/movies" element={<Movies />} />
                   <Route path="/movie/:tmdbId" element={<MovieDetail />} />
+                  <Route path="/actor/:personId" element={<ActorDetail />} />
                   <Route path="/user/:uid" element={<UserProfile />} />
                   <Route path="/watched/:uid/:year?" element={<WatchedByYear />} />
                   <Route path="/lists" element={<ProtectedRoute><Lists /></ProtectedRoute>} />

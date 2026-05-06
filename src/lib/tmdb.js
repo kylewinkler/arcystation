@@ -110,6 +110,40 @@ export async function getMovieDetails(tmdbId) {
   };
 }
 
+export async function getPersonDetails(personId) {
+  const res = await fetch(
+    `${BASE_URL}/person/${personId}?api_key=${API_KEY}&append_to_response=movie_credits`
+  );
+  if (!res.ok) return null;
+  const p = await res.json();
+  if (p.success === false) return null;
+  const seen = new Set();
+  const filmography = (p.movie_credits?.cast || [])
+    .filter((m) => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    })
+    .map((m) => ({
+      tmdbId: String(m.id),
+      title: m.title,
+      year: m.release_date ? m.release_date.slice(0, 4) : '',
+      releaseDate: m.release_date || '',
+      posterPath: m.poster_path,
+      overview: m.overview,
+      genreIds: m.genre_ids || [],
+      character: m.character || '',
+    }))
+    .sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || ''));
+  return {
+    personId: String(p.id),
+    name: p.name,
+    profilePath: p.profile_path,
+    biography: p.biography || '',
+    filmography,
+  };
+}
+
 export async function getFullMovieDetails(tmdbId) {
   const res = await fetch(
     `${BASE_URL}/movie/${tmdbId}?api_key=${API_KEY}&append_to_response=credits`
