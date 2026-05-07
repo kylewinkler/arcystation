@@ -1,11 +1,13 @@
-import { forwardRef, useEffect, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import StarRating from '../StarRating';
 import { getMovieReviews } from '../../lib/firestore';
+import { useAuth } from '../../context/AuthContext';
 
 const PAGE_SIZE = 6;
 
 const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey }, ref) {
+  const { user } = useAuth();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -20,9 +22,16 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
       .finally(() => setLoading(false));
   }, [tmdbId, refreshKey]);
 
-  const totalPages = Math.max(1, Math.ceil(reviews.length / PAGE_SIZE));
-  const visible = reviews.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const showPager = reviews.length > PAGE_SIZE;
+  const orderedReviews = useMemo(() => {
+    if (!user) return reviews;
+    const mine = reviews.filter((r) => r.profile.uid === user.uid);
+    const rest = reviews.filter((r) => r.profile.uid !== user.uid);
+    return [...mine, ...rest];
+  }, [reviews, user]);
+
+  const totalPages = Math.max(1, Math.ceil(orderedReviews.length / PAGE_SIZE));
+  const visible = orderedReviews.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const showPager = orderedReviews.length > PAGE_SIZE;
 
   return (
     <div ref={ref}>
@@ -38,7 +47,12 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {visible.map(({ review, profile }) => (
-              <ReviewCard key={profile.uid} review={review} profile={profile} />
+              <ReviewCard
+                key={profile.uid}
+                review={review}
+                profile={profile}
+                isMine={user?.uid === profile.uid}
+              />
             ))}
           </div>
           {showPager && (
@@ -68,11 +82,12 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
   );
 });
 
-function ReviewCard({ review, profile }) {
+function ReviewCard({ review, profile, isMine }) {
   const hasRating = review.rating > 0;
   const hasNote = !!review.note;
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-2.5 flex flex-col">
+    <div className={`bg-gray-900/60 border border-gray-800 rounded-lg p-2.5 flex flex-col ${isMine ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`}>
       <Link
         to={`/user/${profile.uid}`}
         className="flex items-center gap-2 group min-w-0"
@@ -94,7 +109,13 @@ function ReviewCard({ review, profile }) {
       </Link>
       {hasRating && <div className="mt-1"><StarRating value={review.rating} size="sm" /></div>}
       {hasNote ? (
-        <p className="text-gray-300 text-xs mt-1.5 italic line-clamp-4">"{review.note}"</p>
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className={`text-gray-300 text-xs mt-1.5 italic text-left cursor-pointer hover:text-white transition-colors ${expanded ? '' : 'line-clamp-4'}`}
+        >
+          "{review.note}"
+        </button>
       ) : (
         !hasRating && <p className="text-gray-500 text-xs mt-1.5">Watched it</p>
       )}

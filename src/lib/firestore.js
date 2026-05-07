@@ -31,6 +31,27 @@ function reviewDocId(uid, tmdbId) {
 
 // ── Lists ──
 
+export function getWatchlistId(uid) {
+  return `watchlist__${uid}`;
+}
+
+export async function createWatchlist(uid) {
+  const id = getWatchlistId(uid);
+  await setDoc(doc(db, 'lists', id), {
+    title: 'Watchlist',
+    description: '',
+    createdBy: uid,
+    kind: 'watchlist',
+    movieCount: 0,
+    isPublic: false,
+    shareSlug: null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await startList(uid, id);
+  return id;
+}
+
 export async function createList({ title, description, createdBy }) {
   const ref = await addDoc(collection(db, 'lists'), {
     title,
@@ -97,6 +118,10 @@ export async function getPrebuiltLists() {
 }
 
 export async function updateList(listId, data) {
+  const existing = await getDoc(doc(db, 'lists', listId));
+  if (existing.exists() && existing.data().kind === 'watchlist') {
+    throw new Error('The default Watchlist cannot be edited.');
+  }
   await updateDoc(doc(db, 'lists', listId), {
     ...data,
     updatedAt: serverTimestamp(),
@@ -116,6 +141,10 @@ export async function setFeaturedMovie(listId, movie) {
 }
 
 export async function deleteList(listId) {
+  const existing = await getDoc(doc(db, 'lists', listId));
+  if (existing.exists() && existing.data().kind === 'watchlist') {
+    throw new Error('The default Watchlist cannot be deleted.');
+  }
   // Delete movies subcollection + list doc
   const moviesSnap = await getDocs(collection(db, 'lists', listId, 'movies'));
   const batch = writeBatch(db);
@@ -410,6 +439,18 @@ export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieDa
   }
   await setDoc(ref, entry, { merge: true });
   await recomputeMovieStats(tmdbId).catch(() => {});
+
+  // Auto-remove from the user's Watchlist on first-ever watch. Rewatches
+  // (where a review already existed) leave the watchlist alone — the user
+  // intentionally re-added a previously-watched movie and can take it off
+  // manually when done.
+  if (!prev.exists()) {
+    const watchlistMovieRef = doc(db, 'lists', getWatchlistId(uid), 'movies', tmdbId);
+    const watchlistMovieSnap = await getDoc(watchlistMovieRef);
+    if (watchlistMovieSnap.exists()) {
+      await removeMovieFromList(getWatchlistId(uid), tmdbId);
+    }
+  }
 }
 
 export async function unmarkWatchedStandalone(uid, tmdbId) {
@@ -892,6 +933,9 @@ export async function unpinList(uid, listId) {
 
 export function sortLists(lists, pinnedIds) {
   return [...lists].sort((a, b) => {
+    const aWatchlist = a.list?.kind === 'watchlist' ? 1 : 0;
+    const bWatchlist = b.list?.kind === 'watchlist' ? 1 : 0;
+    if (aWatchlist !== bWatchlist) return bWatchlist - aWatchlist;
     const aPinned = pinnedIds.has(a.listId) ? 1 : 0;
     const bPinned = pinnedIds.has(b.listId) ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;

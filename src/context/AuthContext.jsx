@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
+import { createWatchlist } from '../lib/firestore';
 
 const AuthContext = createContext(null);
 
@@ -23,6 +24,7 @@ export function AuthProvider({ children }) {
               isPublic: true,
               createdAt: serverTimestamp(),
             });
+            await createWatchlist(firebaseUser.uid);
           } else {
             const stored = snap.data();
             if (

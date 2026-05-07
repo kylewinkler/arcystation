@@ -16,6 +16,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/lists/$(listId)).data.createdBy == request.auth.uid;
     }
 
+    // Keep in sync with src/lib/admin.js ADMIN_UIDS.
+    function isAdmin() {
+      return signedIn() && request.auth.uid in [
+        'sRFkyB9sKPXZmObQgMZDaeklH3o2',
+      ];
+    }
+
     // Users — created on first login by AuthContext.
     // Publicly readable so reviewer cards, profile pages, and friend lookups
     // work for anonymous visitors. The `isPublic` field on the doc gates the
@@ -34,8 +41,8 @@ service cloud.firestore {
     // Lists (top-level).
     match /lists/{listId} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+      allow create: if signedIn() && (request.resource.data.createdBy == request.auth.uid || isAdmin());
+      allow update, delete: if signedIn() && (resource.data.createdBy == request.auth.uid || isAdmin());
 
       // Movies in a list — only the list owner can mutate.
       match /movies/{tmdbId} {
@@ -48,8 +55,8 @@ service cloud.firestore {
     // Doc id format: `${uid}__${listId}`. The `uid` field on the doc is the source of truth.
     match /listMembers/{memberId} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow update: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
       // List owner may delete any member doc for their list (cascading list cleanup).
       // If the list itself is already gone, allow cleanup so orphans don't accumulate.
       allow delete: if signedIn() && (

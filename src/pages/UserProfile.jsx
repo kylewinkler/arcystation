@@ -7,6 +7,7 @@ import {
   getList, getAllWatchedMovies,
   getPinnedLists, pinList, unpinList, sortLists,
   getListMovies, getWatchedMovies, getPrebuiltLists,
+  getWatchlistId,
 } from '../lib/firestore';
 import ListCard from '../components/lists/ListCard';
 import SuggestionCard from '../components/movies/SuggestionCard';
@@ -49,6 +50,7 @@ export default function UserProfile() {
   const [continueItem, setContinueItem] = useState(null);
   const [startWatching, setStartWatching] = useState(null);
   const [almostDone, setAlmostDone] = useState(null);
+  const [watchlistItem, setWatchlistItem] = useState(null);
   const [newInLists, setNewInLists] = useState(null);
   const [page, setPage] = useState(1);
   const [isFriend, setIsFriend] = useState(false);
@@ -154,8 +156,10 @@ export default function UserProfile() {
       // movies + watched maps for any list with something unwatched, then pick
       // representatives. Shows the user something actionable at the top of the
       // page without making them scan list cards.
+      const watchlistId = getWatchlistId(uid);
+      const watchlistEntry = validLists.find((item) => item.listId === watchlistId);
       const withUnwatched = validLists.filter(
-        (item) => item.watchedCount < (item.list.movieCount || 0)
+        (item) => item.listId !== watchlistId && item.watchedCount < (item.list.movieCount || 0)
       );
       const allIncomplete = withUnwatched.filter((item) => item.watchedCount > 0);
 
@@ -274,6 +278,16 @@ export default function UserProfile() {
         newCandidates.sort((a, b) => b.releasedAt - a.releasedAt);
         const top = newCandidates[0];
         setNewInLists({ movie: top.movie, listTitle: top.listTitle, listId: top.listId });
+      }
+
+      // Watchlist tile: show a random film from the user's Watchlist if it has
+      // any. Independent of watched state — the watchlist is a "save for later"
+      // surface, not a progress tracker.
+      if (watchlistEntry && (watchlistEntry.list.movieCount || 0) > 0) {
+        const wlMovies = await getListMovies(watchlistId);
+        if (wlMovies.length > 0) {
+          setWatchlistItem({ movie: pickRandom(wlMovies), listId: watchlistId });
+        }
       }
     }
 
@@ -444,8 +458,16 @@ export default function UserProfile() {
             </div>
 
             {/* Suggestion tiles — owner only */}
-            {isOwner && (continueItem || startWatching || almostDone) && (
+            {isOwner && (continueItem || startWatching || almostDone || watchlistItem) && (
               <div className="space-y-3">
+                {watchlistItem && (
+                  <SuggestionCard
+                    movie={watchlistItem.movie}
+                    label={<><span className="text-white">On your</span> Watchlist</>}
+                    labelColor="text-pink-400"
+                    to={`/lists/${watchlistItem.listId}`}
+                  />
+                )}
                 {continueItem && (
                   <SuggestionCard
                     movie={continueItem.movie}

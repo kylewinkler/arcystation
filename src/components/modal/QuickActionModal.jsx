@@ -9,7 +9,10 @@ import { posterUrl } from '../../lib/tmdb';
 import {
   markWatchedStandalone, unmarkWatchedStandalone,
   getWatchedInfo, getAllWatchedTmdbIds, notifyFriends,
+  getWatchlistId, addMovieToList, removeMovieFromList,
 } from '../../lib/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useToast } from '../../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS } from '../../lib/copy/lore';
 import { getMilestone } from '../../lib/copy/lore';
@@ -24,6 +27,8 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
   const [watchedData, setWatchedData] = useState(null);
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
+  const [onWatchlist, setOnWatchlist] = useState(false);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
 
   // Reset state on open/close
   useEffect(() => {
@@ -33,10 +38,14 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       getWatchedInfo(user.uid, movie.tmdbId).then((info) => {
         setWatchedData(info);
       });
+      // Check watchlist membership
+      getDoc(doc(db, 'lists', getWatchlistId(user.uid), 'movies', movie.tmdbId))
+        .then((snap) => setOnWatchlist(snap.exists()));
     } else {
       setWatchedData(null);
       setRating(0);
       setNote('');
+      setOnWatchlist(false);
     }
   }, [isOpen, movie?.tmdbId]);
 
@@ -87,6 +96,25 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       overview: movie.overview || '',
       genreIds: movie.genreIds || [],
     };
+  }
+
+  async function handleToggleWatchlist() {
+    if (watchlistBusy) return;
+    setWatchlistBusy(true);
+    const watchlistId = getWatchlistId(user.uid);
+    try {
+      if (onWatchlist) {
+        await removeMovieFromList(watchlistId, movie.tmdbId);
+        setOnWatchlist(false);
+        showToast({ message: 'Removed from Watchlist', duration: 1500 });
+      } else {
+        await addMovieToList(watchlistId, getMovieData());
+        setOnWatchlist(true);
+        showToast({ message: 'Added to Watchlist', duration: 1500 });
+      }
+    } finally {
+      setWatchlistBusy(false);
+    }
   }
 
   function openRating() {
@@ -184,6 +212,26 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
           Mark as watched
         </button>
       )}
+
+      {/* Add to / Remove from Watchlist */}
+      <button
+        onClick={handleToggleWatchlist}
+        disabled={watchlistBusy}
+        className={`w-full flex items-center gap-2 text-sm border px-3 py-2.5 rounded-lg transition-colors ${
+          onWatchlist
+            ? 'text-purple-300 border-purple-500/50 bg-purple-600/10 hover:border-purple-500'
+            : 'text-gray-400 border-gray-700 hover:text-purple-400 hover:border-purple-500'
+        } disabled:opacity-50`}
+      >
+        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${onWatchlist ? 'bg-purple-600 border-purple-600' : 'border-gray-600'}`}>
+          {onWatchlist && (
+            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </div>
+        {onWatchlist ? 'On Watchlist' : 'Add to Watchlist'}
+      </button>
 
       {/* Add to list */}
       <button

@@ -73,6 +73,7 @@ export default function ListDetail() {
   const { showToast } = useToast();
   const isOwner = list?.createdBy === user?.uid;
   const isPrebuilt = list?.isPrebuilt === true;
+  const isWatchlist = list?.kind === 'watchlist';
   const isViewingSelf = !viewerUid || viewerUid === user?.uid;
   const targetUid = viewerUid || user?.uid;
 
@@ -444,7 +445,7 @@ export default function ListDetail() {
             </button>
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-40">
-                {isOwner && !isPrebuilt && (
+                {isOwner && !isPrebuilt && !isWatchlist && (
                   <>
                     <Link
                       to={`/lists/${id}/edit`}

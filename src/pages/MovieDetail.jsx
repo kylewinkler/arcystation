@@ -256,30 +256,6 @@ export default function MovieDetail() {
         <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
       )}
 
-      {(() => {
-        const myReview = standaloneWatched;
-        const allReviews = [
-          ...(myReview && user ? [{
-            review: { ...myReview, tmdbId: String(tmdbId) },
-            profile: { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
-          }] : []),
-          ...friendReviews.filter((r) => r.profile.uid !== user?.uid),
-        ];
-        if (allReviews.length === 0) return null;
-        return (
-          <FriendReviewsCarousel
-            reviews={allReviews}
-            movieTitle={movie.title}
-            posterPath={movie.posterPath}
-            onOwnReviewClick={() => {
-              setRating(displayRating || 0);
-              setNote(displayNote || '');
-              setRatingModal(true);
-            }}
-          />
-        );
-      })()}
-
       {/* Lists I'm on that have this movie */}
       {myLists.length > 0 && (
         <div>
@@ -306,6 +282,18 @@ export default function MovieDetail() {
           </p>
         </div>
       )}
+
+      {(() => {
+        const onlyFriends = friendReviews.filter((r) => r.profile.uid !== user?.uid);
+        if (onlyFriends.length === 0) return null;
+        return (
+          <FriendReviewsCarousel
+            reviews={onlyFriends}
+            movieTitle={movie.title}
+            posterPath={movie.posterPath}
+          />
+        );
+      })()}
 
       {/* Site reviews (replaces Cast) */}
       <SiteReviews

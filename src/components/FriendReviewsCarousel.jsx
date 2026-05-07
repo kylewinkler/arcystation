@@ -67,6 +67,7 @@ export default function FriendReviewsCarousel({ reviews, movieTitle, posterPath,
 
   return (
     <div>
+      <h2 className="text-md font-medium text-gray-400 mb-2">Friends Reviews</h2>
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {reviewsState.map((r, i) => {
           const isActive = i === index;

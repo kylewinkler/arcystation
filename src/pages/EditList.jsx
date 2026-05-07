@@ -30,6 +30,10 @@ export default function EditList() {
       navigate('/');
       return;
     }
+    if (listData.kind === 'watchlist') {
+      navigate(`/lists/${id}`);
+      return;
+    }
     setList(listData);
     setTitle(listData.title);
     setDescription(listData.description || '');
