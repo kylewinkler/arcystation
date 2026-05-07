@@ -34,7 +34,26 @@ function pickBestHit(hits, title) {
   return null;
 }
 
+async function tryPageExists(pageTitle) {
+  const data = await wikiFetch({ action: 'query', titles: pageTitle, redirects: 1 });
+  const pages = data?.query?.pages || {};
+  const first = Object.values(pages)[0];
+  if (!first || first.missing != null) return null;
+  return first.title;
+}
+
 async function searchFilmPage(title, year) {
+  // Try direct disambiguated titles first — sidesteps noisy search index for
+  // common names (e.g. "Michael" returning Michael Jackson articles).
+  const directCandidates = [
+    year ? `${title} (${year} film)` : null,
+    `${title} (film)`,
+  ].filter(Boolean);
+  for (const candidate of directCandidates) {
+    const resolved = await tryPageExists(candidate);
+    if (resolved) return resolved;
+  }
+
   const queries = [
     year ? `"${title}" ${year} film` : null,
     year ? `${title} ${year} film` : null,

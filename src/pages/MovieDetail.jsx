@@ -17,10 +17,10 @@ import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } fro
 import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
 import RatingModal from '../components/modal/RatingModal';
 import AddToListModal from '../components/modal/AddToListModal';
-import PlotModal from '../components/modal/PlotModal';
 import FriendReviewsCarousel from '../components/FriendReviewsCarousel';
 import MovieActionsMenu from '../components/movie/MovieActionsMenu';
 import SiteReviews from '../components/movie/SiteReviews';
+import MoviePlot from '../components/movie/MoviePlot';
 import LoginPrompt from '../components/auth/LoginPrompt';
 
 export default function MovieDetail() {
@@ -37,7 +37,6 @@ export default function MovieDetail() {
   const [note, setNote] = useState('');
   const [friendReviews, setFriendReviews] = useState([]);
   const [addListModal, setAddListModal] = useState(false);
-  const [plotModal, setPlotModal] = useState(false);
   const [reviewStats, setReviewStats] = useState(null);
   const [reviewsKey, setReviewsKey] = useState(0); // bump to force SiteReviews refetch
   const [loginPromptMessage, setLoginPromptMessage] = useState(null);
@@ -209,7 +208,6 @@ export default function MovieDetail() {
             </h1>
             <MovieActionsMenu
               isWatched={isWatched}
-              onViewPlot={() => setPlotModal(true)}
               onAddToList={requireAuth(() => setAddListModal(true), 'Sign in to add movies to your lists.')}
               onMarkWatched={requireAuth(openMarkWatchedModal, 'Sign in to rate movies.')}
             />
@@ -285,7 +283,7 @@ export default function MovieDetail() {
       {/* Lists I'm on that have this movie */}
       {myLists.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-gray-400 mb-2">On your lists</h2>
+          <h2 className="text-md font-medium text-gray-400 mb-2">On your lists</h2>
           <p className="text-sm text-gray-400">
             {myLists.map(({ list }, i) => (
               <span key={list.id}>
@@ -317,9 +315,11 @@ export default function MovieDetail() {
         refreshKey={reviewsKey}
       />
 
+      <MoviePlot tmdbId={tmdbId} title={movie.title} year={movie.year} />
+
       {cast.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-gray-400 mb-2">Cast</h2>
+          <h2 className="text-md font-medium text-gray-400 mb-2">Cast</h2>
           <div className="space-y-2">
             {cast.map((c) => (
               <Link
@@ -344,7 +344,7 @@ export default function MovieDetail() {
 
       {recommendations.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-gray-400 mb-2">Similar Movies</h2>
+          <h2 className="text-md font-medium text-gray-400 mb-2">Similar Movies</h2>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {recommendations.map((r) => (
               <Link
@@ -394,14 +394,6 @@ export default function MovieDetail() {
         movie={movie}
         user={user}
         onChanged={loadUserData}
-      />
-
-      <PlotModal
-        isOpen={plotModal}
-        onClose={() => setPlotModal(false)}
-        tmdbId={tmdbId}
-        title={movie.title}
-        year={movie.year}
       />
 
       <LoginPrompt

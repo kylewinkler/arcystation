@@ -26,14 +26,7 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
 
   return (
     <div ref={ref}>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-md font-medium text-gray-400">Site reviews</h2>
-        {stats?.count > 0 && (
-          <span className="text-xs text-gray-500">
-
-          </span>
-        )}
-      </div>
+      <h2 className="text-md font-medium text-gray-400 mb-2">Site reviews</h2>
 
       {loading ? (
         <p className="text-sm text-gray-500">Loading reviews…</p>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function MovieActionsMenu({ isWatched, onViewPlot, onAddToList, onMarkWatched }) {
+export default function MovieActionsMenu({ isWatched, onAddToList, onMarkWatched }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -48,12 +48,6 @@ export default function MovieActionsMenu({ isWatched, onViewPlot, onAddToList, o
             className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
           >
             Add to list
-          </button>
-          <button
-            onClick={pick(onViewPlot)}
-            className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
-          >
-            View plot (spoilers)
           </button>
         </div>
       )}
