@@ -133,6 +133,7 @@ export async function getPersonDetails(personId) {
       overview: m.overview,
       genreIds: m.genre_ids || [],
       character: m.character || '',
+      popularity: m.popularity || 0,
     }))
     .sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || ''));
   return {

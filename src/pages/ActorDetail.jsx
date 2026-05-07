@@ -6,6 +6,7 @@ import { getAllWatchedTmdbIds } from '../lib/firestore';
 import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
+import MoviePosterTile from '../components/movies/MoviePosterTile';
 import QuickActionModal from '../components/modal/QuickActionModal';
 
 const ACTOR_NOT_FOUND = {
@@ -55,6 +56,7 @@ export default function ActorDetail() {
   const [loading, setLoading] = useState(true);
   const [watched, setWatched] = useState(new Set());
   const [quickActionMovie, setQuickActionMovie] = useState(null);
+  const [bioExpanded, setBioExpanded] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -78,6 +80,9 @@ export default function ActorDetail() {
   if (!person) return <NotFound title={ACTOR_NOT_FOUND.title} subtitle={ACTOR_NOT_FOUND.subtitle} scene={ACTOR_NOT_FOUND.scene} />;
 
   const grouped = groupByYear(person.filmography);
+  const popular = [...person.filmography]
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+    .slice(0, 5);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -98,16 +103,49 @@ export default function ActorDetail() {
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-white">{person.name}</h1>
           {person.biography && (
-            <p className="text-gray-300 text-sm leading-relaxed mt-3 hidden sm:block whitespace-pre-line">
-              {person.biography}
-            </p>
+            <div className="mt-3 hidden sm:block">
+              <p className={`text-gray-300 text-sm leading-relaxed whitespace-pre-line ${bioExpanded ? '' : 'line-clamp-[9]'}`}>
+                {person.biography}
+              </p>
+              {(person.biography.length > 400) && (
+                <button
+                  onClick={() => setBioExpanded((v) => !v)}
+                  className="text-xs text-purple-400 hover:text-purple-300 mt-1"
+                >
+                  {bioExpanded ? 'See less' : 'See more'}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
       {person.biography && (
-        <p className="text-gray-300 text-sm leading-relaxed sm:hidden whitespace-pre-line">
-          {person.biography}
-        </p>
+        <div className="sm:hidden">
+          <p className={`text-gray-300 text-sm leading-relaxed whitespace-pre-line ${bioExpanded ? '' : 'line-clamp-[9]'}`}>
+            {person.biography}
+          </p>
+          {(person.biography.length > 400) && (
+            <button
+              onClick={() => setBioExpanded((v) => !v)}
+              className="text-xs text-purple-400 hover:text-purple-300 mt-1"
+            >
+              {bioExpanded ? 'See less' : 'See more'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {popular.length > 0 && (
+        <div className="grid grid-cols-5 gap-3">
+          {popular.map((m) => (
+            <MoviePosterTile
+              key={m.tmdbId}
+              movie={m}
+              isSeen={watched.has(m.tmdbId)}
+              onClick={() => handleMovieClick(m)}
+            />
+          ))}
+        </div>
       )}
 
       {grouped.length > 0 ? (
