@@ -246,7 +246,15 @@ export default function MovieDetail() {
           )}
           {directors.length > 0 && (
             <p className="text-sm text-gray-400 mt-2">
-              Directed by <span className="text-white">{directors.map((d) => d.name).join(', ')}</span>
+              Directed by{' '}
+              {directors.map((d, i) => (
+                <span key={d.id}>
+                  {i > 0 && ', '}
+                  <Link to={`/actor/${d.id}`} className="text-white hover:text-purple-400 transition-colors">
+                    {d.name}
+                  </Link>
+                </span>
+              ))}
             </p>
           )}
           <p className="text-gray-300 text-sm leading-relaxed hidden sm:block">{movie.overview}</p>
@@ -256,32 +264,7 @@ export default function MovieDetail() {
         <p className="text-gray-300 text-sm leading-relaxed sm:hidden">{movie.overview}</p>
       )}
 
-      {/* Lists I'm on that have this movie */}
-      {myLists.length > 0 && (
-        <div>
-          <h2 className="text-md font-medium text-gray-400 mb-2">On your lists</h2>
-          <p className="text-sm text-gray-400">
-            {myLists.map(({ list }, i) => (
-              <span key={list.id}>
-                {i > 0 && ', '}
-                <Link to={`/lists/${list.id}`} className="text-gray-300 hover:text-purple-400 transition-colors">
-                  {list.title}
-                </Link>
-              </span>
-            ))}
-            {user && (
-              <button
-                onClick={() => setAddListModal(true)}
-                className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full border border-gray-700 text-gray-400 hover:text-purple-400 hover:border-purple-500 transition-colors align-middle"
-                aria-label="Add to another list"
-                title="Add to another list"
-              >
-                <span className="text-sm leading-none">+</span>
-              </button>
-            )}
-          </p>
-        </div>
-      )}
+      <MoviePlot tmdbId={tmdbId} title={movie.title} year={movie.year} />
 
       {(() => {
         const onlyFriends = friendReviews.filter((r) => r.profile.uid !== user?.uid);
@@ -302,8 +285,6 @@ export default function MovieDetail() {
         stats={reviewStats}
         refreshKey={reviewsKey}
       />
-
-      <MoviePlot tmdbId={tmdbId} title={movie.title} year={movie.year} />
 
       {cast.length > 0 && (
         <div>
