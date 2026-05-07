@@ -1,11 +1,26 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { searchMovies, posterUrl } from '../../lib/tmdb';
+import { searchMulti, posterUrl } from '../../lib/tmdb';
 import { getAllWatchedTmdbIds } from '../../lib/firestore';
 import NotificationBadge from '../notifications/NotificationBadge';
 import QuickActionModal from '../modal/QuickActionModal';
 import ArcyPop from '../../assets/images/arcy-poses/arcy-popcorn.png';
+
+const ROLE_LABELS = {
+  Acting: 'Actor',
+  Directing: 'Director',
+  Editing: 'Editor',
+  Writing: 'Writer',
+  Production: 'Producer',
+  Camera: 'Cinematographer',
+  Sound: 'Sound',
+  'Visual Effects': 'VFX',
+  Art: 'Art',
+  'Costume & Make-Up': 'Costume',
+  Lighting: 'Lighting',
+  Crew: 'Crew',
+};
 
 export default function Layout({ children }) {
   const { user, login } = useAuth();
@@ -40,7 +55,7 @@ export default function Layout({ children }) {
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await searchMovies(query);
+        const res = await searchMulti(query);
         setResults(res.slice(0, 8));
       } catch (err) {
         console.error('Search failed:', err);
@@ -67,11 +82,13 @@ export default function Layout({ children }) {
     setResults([]);
   }
 
-  function handleResultClick(movie) {
-    if (user) {
-      setQuickActionMovie(movie);
+  function handleResultClick(item) {
+    if (item.kind === 'person') {
+      navigate(`/actor/${item.personId}`);
+    } else if (user) {
+      setQuickActionMovie(item);
     } else {
-      navigate(`/movie/${movie.tmdbId}`);
+      navigate(`/movie/${item.tmdbId}`);
     }
     closeSearch();
   }
@@ -171,17 +188,41 @@ export default function Layout({ children }) {
                 <p className="text-sm text-gray-500 px-2 py-3">No results</p>
               ) : (
                 <ul className="max-h-[60vh] overflow-y-auto">
-                  {results.map((m) => {
-                    const isSeen = watched.has(m.tmdbId);
+                  {results.map((item) => {
+                    if (item.kind === 'person') {
+                      return (
+                        <li key={`person-${item.personId}`}>
+                          <button
+                            onClick={() => handleResultClick(item)}
+                            className="w-full flex items-center gap-3 px-2 py-2 hover:bg-gray-800 rounded-lg transition-colors text-left"
+                          >
+                            {item.profilePath ? (
+                              <img
+                                src={posterUrl(item.profilePath, 'w92')}
+                                alt=""
+                                className="w-9 h-9 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-gray-800 shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-white truncate">{item.name}</p>
+                              <p className="text-xs text-gray-500">{ROLE_LABELS[item.knownForDepartment] || item.knownForDepartment || 'Person'}</p>
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    }
+                    const isSeen = watched.has(item.tmdbId);
                     return (
-                      <li key={m.tmdbId}>
+                      <li key={`movie-${item.tmdbId}`}>
                         <button
-                          onClick={() => handleResultClick(m)}
+                          onClick={() => handleResultClick(item)}
                           className="w-full flex items-center gap-3 px-2 py-2 hover:bg-gray-800 rounded-lg transition-colors text-left"
                         >
-                          {m.posterPath ? (
+                          {item.posterPath ? (
                             <img
-                              src={posterUrl(m.posterPath, 'w92')}
+                              src={posterUrl(item.posterPath, 'w92')}
                               alt=""
                               className={`w-9 h-14 rounded object-cover shrink-0 ${isSeen ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`}
                             />
@@ -189,8 +230,8 @@ export default function Layout({ children }) {
                             <div className={`w-9 h-14 rounded bg-gray-800 shrink-0 ${isSeen ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`} />
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-white truncate">{m.title}</p>
-                            {m.year && <p className="text-xs text-gray-500">{m.year}</p>}
+                            <p className="text-sm text-white truncate">{item.title}</p>
+                            {item.year && <p className="text-xs text-gray-500">{item.year}</p>}
                           </div>
                         </button>
                       </li>

@@ -22,6 +22,36 @@ export async function searchMovies(query, { year } = {}) {
   }));
 }
 
+export async function searchMulti(query) {
+  if (!query.trim()) return [];
+  const url = `${BASE_URL}/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return (data.results || [])
+    .filter((r) => r.media_type === 'movie' || r.media_type === 'person')
+    .map((r) => {
+      if (r.media_type === 'movie') {
+        return {
+          kind: 'movie',
+          tmdbId: String(r.id),
+          title: r.title,
+          year: r.release_date ? r.release_date.slice(0, 4) : '',
+          releaseDate: r.release_date || '',
+          posterPath: r.poster_path,
+          overview: r.overview,
+          genreIds: r.genre_ids || [],
+        };
+      }
+      return {
+        kind: 'person',
+        personId: String(r.id),
+        name: r.name,
+        profilePath: r.profile_path,
+        knownForDepartment: r.known_for_department || '',
+      };
+    });
+}
+
 let genreCache = null;
 export async function getGenreList() {
   if (genreCache) return genreCache;
