@@ -16,6 +16,7 @@ import { MOVIE_NOT_FOUND } from '../lib/copy/empty';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
 import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
+import ArcyPopcorn from '../assets/images/arcy-poses/arcy-popcorn.png';
 import RatingModal from '../components/modal/RatingModal';
 import AddToListModal from '../components/modal/AddToListModal';
 import QuickActionModal from '../components/modal/QuickActionModal';
@@ -85,16 +86,21 @@ export default function MovieDetail() {
   }, [user, tmdbId]);
 
   async function handleHypeChange(newHype) {
-    if (hypeBusy || isWatched) return;
+    if (hypeBusy || standaloneWatched) return;
     setHypeBusy(true);
     try {
       if (newHype > 0) {
         await setHype(user.uid, tmdbId, newHype, getMovieData());
         setHypeData({ hype: newHype });
+        showToast({ message: 'Hype received. Arcy queues the reel.', image: ArcyPopcorn });
       } else {
         await deleteHype(user.uid, tmdbId);
         setHypeData(null);
+        showToast({ message: 'Hype cleared from the archive.', image: ArcyPopcorn });
       }
+    } catch (err) {
+      console.error('Failed to save hype:', err);
+      showToast({ message: 'Hype failed to file. Check your connection.' });
     } finally {
       setHypeBusy(false);
     }

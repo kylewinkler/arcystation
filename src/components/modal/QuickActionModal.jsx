@@ -89,25 +89,6 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     };
   }
 
-  async function handleToggleWatchlist() {
-    if (watchlistBusy) return;
-    setWatchlistBusy(true);
-    const watchlistId = getWatchlistId(user.uid);
-    try {
-      if (onWatchlist) {
-        await removeMovieFromList(watchlistId, movie.tmdbId);
-        setOnWatchlist(false);
-        showToast({ message: 'Removed from Watchlist', duration: 1500 });
-      } else {
-        await addMovieToList(watchlistId, getMovieData());
-        setOnWatchlist(true);
-        showToast({ message: 'Added to Watchlist', duration: 1500 });
-      }
-    } finally {
-      setWatchlistBusy(false);
-    }
-  }
-
   function openRating(initialRating) {
     if (isWatched) {
       setRating(initialRating ?? watchedData.rating ?? 0);
@@ -191,16 +172,18 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
           )}
         </button>
       ) : (
-        <div className="w-full flex items-center gap-2 text-sm border border-gray-700 hover:border-green-500 px-3 py-2 rounded-lg transition-colors">
+        <div className="group w-full flex items-center gap-2 text-sm border border-gray-700 hover:border-orange-500 px-3 py-2 rounded-lg transition-colors">
           <button
             onClick={() => openRating(0)}
-            className="flex items-center gap-2 text-gray-400 hover:text-green-400 transition-colors"
+            className="flex items-center gap-2 text-gray-400 group-hover:text-orange-400 transition-colors"
           >
-            <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
+            <svg
+              className="w-5 h-5 transition-all group-hover:drop-shadow-[0_0_6px_rgb(251,146,60)]"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 2l2.928 6.94L22 9.83l-5.36 4.94L18.18 22 12 18.27 5.82 22l1.54-7.23L2 9.83l7.072-.89L12 2z" />
+            </svg>
             Rate this movie
           </button>
           <span className="ml-auto">
@@ -209,41 +192,35 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
         </div>
       )}
 
-      {/* Add to / Remove from Watchlist */}
-      <button
-        onClick={handleToggleWatchlist}
-        disabled={watchlistBusy}
-        className={`w-full flex items-center gap-2 text-sm border px-3 py-2.5 rounded-lg transition-colors ${
-          onWatchlist
-            ? 'text-purple-300 border-purple-500/50 bg-purple-600/10 hover:border-purple-500'
-            : 'text-gray-400 border-gray-700 hover:text-purple-400 hover:border-purple-500'
-        } disabled:opacity-50`}
-      >
-        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${onWatchlist ? 'bg-purple-600 border-purple-600' : 'border-gray-600'}`}>
-          {onWatchlist && (
-            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </div>
-        {onWatchlist ? 'On Watchlist' : 'Add to Watchlist'}
-      </button>
-
       {/* Add to list */}
       <button
         onClick={() => setMode('lists')}
-        className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 border border-gray-700 hover:border-purple-500 px-3 py-2.5 rounded-lg transition-colors"
+        className="group w-full flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 border border-gray-700 hover:border-purple-500 px-3 py-2.5 rounded-lg transition-colors"
       >
-        <span className="text-lg leading-none">+</span>
+        <svg
+          className="w-5 h-5 transition-all group-hover:drop-shadow-[0_0_6px_rgb(192,132,252)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
         Add to list
       </button>
 
       {/* View movie page */}
       <button
         onClick={() => { onClose(); navigate(`/movie/${movie.tmdbId}`); }}
-        className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-3 py-2.5 rounded-lg transition-colors"
+        className="group w-full flex items-center gap-2 text-sm text-gray-400 hover:text-green-400 border border-gray-700 hover:border-green-500 px-3 py-2.5 rounded-lg transition-colors"
       >
-        <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg
+          className="w-4 h-4 text-green-400 transition-all group-hover:drop-shadow-[0_0_6px_rgb(74,222,128)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" />
         </svg>
         Go To Movie
