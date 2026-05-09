@@ -5,11 +5,12 @@ import {
   getFriendshipsWithMeta, getPendingRequests, getUserProfile,
   searchUsersByName, sendFriendRequest, acceptFriendRequest, removeFriend,
   getSuggestedFriends, getNotifications, getReactionsForReviews,
-  markAllNotificationsRead,
+  markAllNotificationsRead, getAllWatchedTmdbIds,
 } from '../lib/firestore';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import NotificationItem, { groupActivity } from '../components/notifications/NotificationItem';
+import QuickActionModal from '../components/modal/QuickActionModal';
 import { FRIENDS_NONE, FRIENDS_NO_RESULTS } from '../lib/copy/empty';
 
 const FEED_PAGE_SIZE = 10;
@@ -30,11 +31,18 @@ export default function Friends() {
   const [feedProfiles, setFeedProfiles] = useState({});
   const [reactionsByReview, setReactionsByReview] = useState({});
   const [loading, setLoading] = useState(true);
+  const [quickActionMovie, setQuickActionMovie] = useState(null);
+  const [watched, setWatched] = useState(new Set());
   const debounceRef = useRef(null);
   const searchWrapRef = useRef(null);
 
   useEffect(() => {
     loadAll();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    getAllWatchedTmdbIds(user.uid).then(setWatched).catch(() => {});
   }, [user]);
 
   useEffect(() => {
@@ -322,6 +330,7 @@ export default function Friends() {
                   items={g.items}
                   currentUserUid={user.uid}
                   reactionsByReview={reactionsByReview}
+                  onMovieClick={setQuickActionMovie}
                   onReactionChange={(reviewerUid, tmdbId, newReactions) => {
                     setReactionsByReview((prev) => ({
                       ...prev,
@@ -374,6 +383,15 @@ export default function Friends() {
           </div>
         </div>
       )}
+
+      <QuickActionModal
+        isOpen={!!quickActionMovie}
+        onClose={() => setQuickActionMovie(null)}
+        movie={quickActionMovie}
+        user={user}
+        watched={watched}
+        setWatched={setWatched}
+      />
     </div>
   );
 }

@@ -499,6 +499,37 @@ export async function getWatchedMoviesByYear(uid, year) {
   return all.filter((m) => String(m.year) === String(year));
 }
 
+// ── Hype (pre-watch ratings) ──
+// Doc id: `${uid}__${tmdbId}`. A user's hype rating for a movie they
+// haven't reviewed yet. Frozen once a review exists — the modal hides
+// the editor, but the doc stays so it reappears on unmark.
+
+export async function getHype(uid, tmdbId) {
+  const snap = await getDoc(doc(db, 'hypes', reviewDocId(uid, tmdbId)));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function setHype(uid, tmdbId, hype, movieData) {
+  const ref = doc(db, 'hypes', reviewDocId(uid, tmdbId));
+  const entry = {
+    uid,
+    tmdbId,
+    hype,
+    hypedAt: serverTimestamp(),
+  };
+  if (movieData) {
+    entry.title = movieData.title || '';
+    entry.year = movieData.year || '';
+    entry.posterPath = movieData.posterPath || null;
+    if (movieData.genreIds?.length > 0) entry.genreIds = movieData.genreIds;
+  }
+  await setDoc(ref, entry, { merge: true });
+}
+
+export async function deleteHype(uid, tmdbId) {
+  await deleteDoc(doc(db, 'hypes', reviewDocId(uid, tmdbId)));
+}
+
 // ── Movie plots (cached from Wikipedia) ──
 
 export async function getMoviePlot(tmdbId) {

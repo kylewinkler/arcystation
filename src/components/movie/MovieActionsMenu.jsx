@@ -41,7 +41,7 @@ export default function MovieActionsMenu({ isWatched, onAddToList, onMarkWatched
             onClick={pick(onMarkWatched)}
             className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
           >
-            {isWatched ? 'Edit your review' : 'Mark as watched'}
+            {isWatched ? 'Edit your review' : 'Rate this movie'}
           </button>
           <button
             onClick={pick(onAddToList)}

@@ -3,7 +3,7 @@ import { posterUrl } from '../../lib/tmdb';
 import StarRating from '../StarRating';
 import MovieScoreBadge from '../movie/MovieScoreBadge';
 
-export default function MovieCard({ movie, onRemove, watchedData, onToggleWatched, readonly, seenElsewhere, isFeatured, onToggleFeatured }) {
+export default function MovieCard({ movie, onRemove, watchedData, onToggleWatched, readonly, seenElsewhere, isFeatured, onToggleFeatured, onPosterClick }) {
   const isWatched = !!watchedData;
   const isInteractive = onToggleWatched && !readonly;
 
@@ -12,6 +12,13 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
     if (!isInteractive) return;
     onToggleWatched(movie.tmdbId, !isWatched);
   };
+
+  function handlePosterClick(e) {
+    if (!onPosterClick) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPosterClick(movie);
+  }
 
   return (
     <div
@@ -37,7 +44,7 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
         </div>
       )}
 
-      <Link to={`/movie/${movie.tmdbId}`} className="shrink-0" onClick={(e) => e.stopPropagation()}>
+      <Link to={`/movie/${movie.tmdbId}`} className="shrink-0" onClick={onPosterClick ? handlePosterClick : (e) => e.stopPropagation()}>
         {movie.posterPath ? (
           <img
             src={posterUrl(movie.posterPath, 'w92')}
@@ -52,7 +59,7 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
       </Link>
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${isWatched ? 'text-gray-300' : 'text-white'}`}>
-          <Link to={`/movie/${movie.tmdbId}`} className="hover:text-purple-400 transition-colors" onClick={(e) => e.stopPropagation()}>
+          <Link to={`/movie/${movie.tmdbId}`} className="hover:text-purple-400 transition-colors" onClick={onPosterClick ? handlePosterClick : (e) => e.stopPropagation()}>
             {movie.title}{movie.year && <span className="text-gray-400"> ({movie.year})</span>}
           </Link>
         </p>

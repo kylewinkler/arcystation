@@ -25,6 +25,7 @@ import ConfirmModal from '../components/modal/ConfirmModal';
 import { LIST_NOT_FOUND } from '../lib/copy/empty';
 import { ADMIN_UIDS } from '../lib/admin';
 import RatingModal from '../components/modal/RatingModal';
+import QuickActionModal from '../components/modal/QuickActionModal';
 
 export default function ListDetail() {
   const { id } = useParams();
@@ -68,7 +69,13 @@ export default function ListDetail() {
   const [selectedGenre, setSelectedGenre] = useState('');
   const [visibleCount, setVisibleCount] = useState(20);
   const [genres, setGenres] = useState({});
+  const [quickActionMovie, setQuickActionMovie] = useState(null);
   const menuRef = useRef(null);
+
+  function handlePosterClick(movie) {
+    if (user) setQuickActionMovie(movie);
+    else navigate(`/movie/${movie.tmdbId}`);
+  }
 
   const { showToast } = useToast();
   const isOwner = list?.createdBy === user?.uid;
@@ -640,6 +647,7 @@ export default function ListDetail() {
               readonly={!canCheckMovies}
               seenElsewhere={allMyWatched.has(movie.tmdbId)}
               isFeatured={list.featuredMovie?.tmdbId === movie.tmdbId}
+              onPosterClick={handlePosterClick}
               onToggleFeatured={(isOwner || (isPrebuilt && ADMIN_UIDS.includes(user?.uid))) ? async (m) => {
                 await setFeaturedMovie(id, list.featuredMovie?.tmdbId === m.tmdbId ? null : m);
               } : undefined}
@@ -667,6 +675,17 @@ export default function ListDetail() {
         onCancel={handleCancelRating}
         onSave={handleSubmitRating}
       />
+
+      {user && (
+        <QuickActionModal
+          isOpen={!!quickActionMovie}
+          onClose={() => setQuickActionMovie(null)}
+          movie={quickActionMovie}
+          user={user}
+          watched={allMyWatched}
+          setWatched={setAllMyWatched}
+        />
+      )}
 
       {/* Copy list confirmation modal */}
       {showCopyModal && (

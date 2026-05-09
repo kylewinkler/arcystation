@@ -9,10 +9,7 @@ import { posterUrl } from '../../lib/tmdb';
 import {
   markWatchedStandalone, unmarkWatchedStandalone,
   getWatchedInfo, getAllWatchedTmdbIds, notifyFriends,
-  getWatchlistId, addMovieToList, removeMovieFromList,
 } from '../../lib/firestore';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
 import { useToast } from '../../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS } from '../../lib/copy/lore';
 import { getMilestone } from '../../lib/copy/lore';
@@ -27,8 +24,6 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
   const [watchedData, setWatchedData] = useState(null);
   const [rating, setRating] = useState(0);
   const [note, setNote] = useState('');
-  const [onWatchlist, setOnWatchlist] = useState(false);
-  const [watchlistBusy, setWatchlistBusy] = useState(false);
 
   // Reset state on open/close
   useEffect(() => {
@@ -38,14 +33,10 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       getWatchedInfo(user.uid, movie.tmdbId).then((info) => {
         setWatchedData(info);
       });
-      // Check watchlist membership
-      getDoc(doc(db, 'lists', getWatchlistId(user.uid), 'movies', movie.tmdbId))
-        .then((snap) => setOnWatchlist(snap.exists()));
     } else {
       setWatchedData(null);
       setRating(0);
       setNote('');
-      setOnWatchlist(false);
     }
   }, [isOpen, movie?.tmdbId]);
 
@@ -117,12 +108,12 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     }
   }
 
-  function openRating() {
+  function openRating(initialRating) {
     if (isWatched) {
-      setRating(watchedData.rating || 0);
+      setRating(initialRating ?? watchedData.rating ?? 0);
       setNote(watchedData.note || '');
     } else {
-      setRating(0);
+      setRating(initialRating ?? 0);
       setNote('');
     }
     setMode('rating');
@@ -200,17 +191,22 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
           )}
         </button>
       ) : (
-        <button
-          onClick={openRating}
-          className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-green-400 border border-gray-700 hover:border-green-500 px-3 py-2.5 rounded-lg transition-colors"
-        >
-          <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center">
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          Mark as watched
-        </button>
+        <div className="w-full flex items-center gap-2 text-sm border border-gray-700 hover:border-green-500 px-3 py-2 rounded-lg transition-colors">
+          <button
+            onClick={() => openRating(0)}
+            className="flex items-center gap-2 text-gray-400 hover:text-green-400 transition-colors"
+          >
+            <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            Rate this movie
+          </button>
+          <span className="ml-auto">
+            <StarRating value={0} onChange={(v) => openRating(v)} size="md" />
+          </span>
+        </div>
       )}
 
       {/* Add to / Remove from Watchlist */}
@@ -247,10 +243,13 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
         onClick={() => { onClose(); navigate(`/movie/${movie.tmdbId}`); }}
         className="w-full flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-3 py-2.5 rounded-lg transition-colors"
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" />
         </svg>
         Go To Movie
+        <svg className="w-4 h-4 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
       </button>
     </BaseModal>
   );

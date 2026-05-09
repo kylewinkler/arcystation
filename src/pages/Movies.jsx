@@ -354,6 +354,7 @@ export default function Movies() {
                     title={m.title}
                     posterPath={m.posterPath}
                     rating={m.rating}
+                    onClick={() => handleMovieClick(m)}
                   />
                 ))}
               </div>

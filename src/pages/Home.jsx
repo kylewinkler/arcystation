@@ -264,9 +264,10 @@ export default function Home() {
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
             {pickWatched ? "You watched this week's pick" : 'Not sure what to watch?'}
           </p>
-          <Link
-            to={`/movie/${weekPick.movie.tmdbId}`}
-            className="block group"
+          <button
+            type="button"
+            onClick={() => handlePosterClick(weekPick.movie)}
+            className="block w-full text-left group"
           >
             <div
               className={
@@ -313,7 +314,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </Link>
+          </button>
         </div>
       )}
 
@@ -350,6 +351,13 @@ export default function Home() {
                 review={review}
                 profile={profile}
                 stats={stats}
+                onClick={() => handlePosterClick({
+                  tmdbId: review.tmdbId,
+                  title: review.title,
+                  posterPath: review.posterPath,
+                  year: review.year,
+                  genreIds: review.genreIds || [],
+                })}
               />
             ))}
           </div>
@@ -363,7 +371,7 @@ export default function Home() {
           label={<><span className="text-white">A year ago you watched</span></>}
           sublabel={throwback.note ? `"${throwback.note}"` : undefined}
           labelColor="text-amber-400"
-          to={`/movie/${throwback.tmdbId}`}
+          onClick={handlePosterClick}
         />
       )}
 
@@ -429,13 +437,14 @@ export default function Home() {
   );
 }
 
-function RecentReviewCard({ review, profile, stats }) {
+function RecentReviewCard({ review, profile, stats, onClick }) {
   const hasRating = review.rating > 0;
   const hasNote = !!review.note;
   return (
-    <Link
-      to={`/movie/${review.tmdbId}`}
-      className="bg-gray-900/60 border border-gray-800 rounded-lg p-2.5 flex flex-col hover:border-purple-500 transition-colors"
+    <button
+      type="button"
+      onClick={onClick}
+      className="bg-gray-900/60 border border-gray-800 rounded-lg p-2.5 flex flex-col text-left hover:border-purple-500 transition-colors"
     >
       <div className="flex gap-2.5">
         {review.posterPath ? (
@@ -482,6 +491,6 @@ function RecentReviewCard({ review, profile, stats }) {
       ) : (
         !hasRating && <p className="text-gray-500 text-xs mt-1.5">Watched it</p>
       )}
-    </Link>
+    </button>
   );
 }

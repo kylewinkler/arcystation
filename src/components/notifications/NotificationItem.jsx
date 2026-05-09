@@ -38,7 +38,7 @@ export function groupActivity(notifications) {
   return groups;
 }
 
-function WatchedMovieEntry({ item, currentUserUid, reactions, onReactionChange }) {
+function WatchedMovieEntry({ item, currentUserUid, reactions, onReactionChange, onMovieClick }) {
   const { data, fromUid } = item;
   const inner = (
     <div className="flex gap-3">
@@ -78,14 +78,23 @@ function WatchedMovieEntry({ item, currentUserUid, reactions, onReactionChange }
       </div>
     </div>
   );
-  return data.tmdbId ? (
-    <Link to={`/movie/${data.tmdbId}`} className="block hover:opacity-80 transition-opacity">
+  if (!data.tmdbId) return inner;
+  return (
+    <button
+      type="button"
+      onClick={() => onMovieClick?.({
+        tmdbId: String(data.tmdbId),
+        title: data.movieTitle,
+        posterPath: data.posterPath,
+      })}
+      className="block w-full text-left hover:opacity-80 transition-opacity"
+    >
       {inner}
-    </Link>
-  ) : inner;
+    </button>
+  );
 }
 
-export default function NotificationItem({ notification, profile, onFriendAction, extraCount = 0, items = null, currentUserUid, reactionsByReview = {}, onReactionChange }) {
+export default function NotificationItem({ notification, profile, onFriendAction, extraCount = 0, items = null, currentUserUid, reactionsByReview = {}, onReactionChange, onMovieClick }) {
   const { type, data } = notification;
   const reviewKey = data?.tmdbId ? `${notification.fromUid}__${data.tmdbId}` : null;
   const reactions = reviewKey ? reactionsByReview[reviewKey] : null;
@@ -318,6 +327,7 @@ export default function NotificationItem({ notification, profile, onFriendAction
                   currentUserUid={currentUserUid}
                   reactions={k ? reactionsByReview[k] : null}
                   onReactionChange={onReactionChange}
+                  onMovieClick={onMovieClick}
                 />
               );
             })}
@@ -333,12 +343,24 @@ export default function NotificationItem({ notification, profile, onFriendAction
     );
   }
 
+  function activate() {
+    if (link?.startsWith('/movie/') && data?.tmdbId && onMovieClick) {
+      onMovieClick({
+        tmdbId: String(data.tmdbId),
+        title: data.movieTitle,
+        posterPath: data.posterPath,
+      });
+      return;
+    }
+    if (link) navigate(link);
+  }
+
   return link ? (
     <div
       role="link"
       tabIndex={0}
-      onClick={() => navigate(link)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(link); } }}
+      onClick={activate}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
       className="block hover:opacity-80 transition-opacity cursor-pointer"
     >
       {header}

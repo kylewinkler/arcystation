@@ -6,8 +6,9 @@ import {
   getUserAllProgress, getListMovies, getList,
   markWatchedStandalone, unmarkWatchedStandalone, getWatchedInfo,
   getAllWatchedTmdbIds, notifyFriends, getFriendReviewsForMovie,
-  getMovieReviewStats,
+  getMovieReviewStats, getHype, setHype, deleteHype,
 } from '../lib/firestore';
+import StarRating from '../components/StarRating';
 import BackButton from '../components/BackButton';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -17,6 +18,7 @@ import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } fro
 import ArcyReaddTransmission from '../assets/images/arcy-poses/arcy-read-transmission.png';
 import RatingModal from '../components/modal/RatingModal';
 import AddToListModal from '../components/modal/AddToListModal';
+import QuickActionModal from '../components/modal/QuickActionModal';
 import FriendReviewsCarousel from '../components/FriendReviewsCarousel';
 import MovieActionsMenu from '../components/movie/MovieActionsMenu';
 import SiteReviews from '../components/movie/SiteReviews';
@@ -40,6 +42,10 @@ export default function MovieDetail() {
   const [reviewStats, setReviewStats] = useState(null);
   const [reviewsKey, setReviewsKey] = useState(0); // bump to force SiteReviews refetch
   const [loginPromptMessage, setLoginPromptMessage] = useState(null);
+  const [recommendQuickAction, setRecommendQuickAction] = useState(null);
+  const [recommendWatched, setRecommendWatched] = useState(new Set());
+  const [hypeData, setHypeData] = useState(null);
+  const [hypeBusy, setHypeBusy] = useState(false);
   const reviewsRef = useRef(null);
   const { showToast } = useToast();
 
@@ -67,6 +73,32 @@ export default function MovieDetail() {
     if (!tmdbId) return;
     getMovieReviewStats(tmdbId).then(setReviewStats).catch(() => {});
   }, [tmdbId, reviewsKey]);
+
+  useEffect(() => {
+    if (!user) return;
+    getAllWatchedTmdbIds(user.uid).then(setRecommendWatched).catch(() => {});
+  }, [user, reviewsKey]);
+
+  useEffect(() => {
+    if (!user || !tmdbId) { setHypeData(null); return; }
+    getHype(user.uid, tmdbId).then(setHypeData).catch(() => {});
+  }, [user, tmdbId]);
+
+  async function handleHypeChange(newHype) {
+    if (hypeBusy || isWatched) return;
+    setHypeBusy(true);
+    try {
+      if (newHype > 0) {
+        await setHype(user.uid, tmdbId, newHype, getMovieData());
+        setHypeData({ hype: newHype });
+      } else {
+        await deleteHype(user.uid, tmdbId);
+        setHypeData(null);
+      }
+    } finally {
+      setHypeBusy(false);
+    }
+  }
 
   async function loadMovie() {
     setLoading(true);
@@ -244,6 +276,23 @@ export default function MovieDetail() {
               </button>
             )
           )}
+          {user && !isWatched && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Your hype</span>
+              <StarRating
+                value={hypeData?.hype || 0}
+                onChange={handleHypeChange}
+                size="md"
+              />
+            </div>
+          )}
+          {user && isWatched && hypeData?.hype > 0 && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Hyped</span>
+              <StarRating value={hypeData.hype} size="sm" />
+              <span className="text-[10px] uppercase tracking-wide text-gray-600">frozen</span>
+            </div>
+          )}
           {directors.length > 0 && (
             <p className="text-sm text-gray-400 mt-2">
               Directed by{' '}
@@ -316,10 +365,21 @@ export default function MovieDetail() {
           <h2 className="text-md font-medium text-gray-400 mb-2">Similar Movies</h2>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {recommendations.map((r) => (
-              <Link
+              <button
+                type="button"
                 key={r.id}
-                to={`/movie/${r.id}`}
-                className="group"
+                onClick={() => {
+                  if (!user) return setLoginPromptMessage('Sign in to rate this movie.');
+                  setRecommendQuickAction({
+                    tmdbId: String(r.id),
+                    title: r.title,
+                    posterPath: r.poster_path,
+                    year: r.release_date ? r.release_date.slice(0, 4) : '',
+                    overview: r.overview || '',
+                    genreIds: r.genre_ids || [],
+                  });
+                }}
+                className="group text-left"
               >
                 {r.poster_path ? (
                   <img
@@ -333,7 +393,7 @@ export default function MovieDetail() {
                   </div>
                 )}
                 <p className="text-xs text-gray-400 mt-1 truncate group-hover:text-white transition-colors">{r.title}</p>
-              </Link>
+              </button>
             ))}
           </div>
         </div>
@@ -370,6 +430,17 @@ export default function MovieDetail() {
         onClose={() => setLoginPromptMessage(null)}
         message={loginPromptMessage || undefined}
       />
+
+      {user && (
+        <QuickActionModal
+          isOpen={!!recommendQuickAction}
+          onClose={() => setRecommendQuickAction(null)}
+          movie={recommendQuickAction}
+          user={user}
+          watched={recommendWatched}
+          setWatched={setRecommendWatched}
+        />
+      )}
     </div>
   );
 }
