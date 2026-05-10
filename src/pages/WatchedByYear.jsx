@@ -11,6 +11,8 @@ import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import { WATCHED_NO_MATCHES, WATCHED_NONE } from '../lib/copy/empty';
 
+const PAGE_SIZE = 60;
+
 export default function WatchedByYear() {
   const { uid, year: urlYear } = useParams();
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ export default function WatchedByYear() {
   const [loading, setLoading] = useState(true);
   const [myWatchedIds, setMyWatchedIds] = useState(new Set());
   const [selected, setSelected] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const isOwner = user?.uid === uid;
 
@@ -78,6 +81,14 @@ export default function WatchedByYear() {
       if (sortBy === 'rating_asc') return (a.rating || 0) - (b.rating || 0);
       return 0;
     });
+
+  // Reset visible window when filter/sort inputs change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, selectedYear, selectedGenre, sortBy]);
+
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   const handleYearChange = (val) => {
     setSelectedYear(val);
@@ -174,19 +185,31 @@ export default function WatchedByYear() {
 
       {/* Movie grid */}
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3 items-start">
-          {filtered.map((m) => (
-            <WatchedPoster
-              key={m.tmdbId}
-              tmdbId={m.tmdbId}
-              title={m.title}
-              posterPath={m.posterPath}
-              rating={m.rating}
-              glow={myWatchedIds.has(m.tmdbId)}
-              onClick={() => setSelected(m)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3 items-start">
+            {visible.map((m) => (
+              <WatchedPoster
+                key={m.tmdbId}
+                tmdbId={m.tmdbId}
+                title={m.title}
+                posterPath={m.posterPath}
+                rating={m.rating}
+                glow={myWatchedIds.has(m.tmdbId)}
+                onClick={() => setSelected(m)}
+              />
+            ))}
+          </div>
+          {hasMore && (
+            <div className="text-center pt-2 pb-4">
+              <button
+                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                className="text-sm text-purple-400 hover:text-purple-300 border border-gray-700 hover:border-purple-500 px-6 py-2 rounded-lg transition-colors"
+              >
+                Load more
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <NotFound
           title={search || selectedGenre ? WATCHED_NO_MATCHES.title : WATCHED_NONE.title}
