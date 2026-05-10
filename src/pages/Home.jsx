@@ -458,7 +458,7 @@ function RecentReviewCard({ review, profile, stats, onClick }) {
         )}
         <div className="min-w-0 flex-1">
           {review.title && (
-            <p className="text-white text-xs font-medium truncate">{review.title}</p>
+            <p className="text-white text-xs font-medium line-clamp-1 break-words">{review.title}</p>
           )}
           {review.year && <p className="text-[10px] text-gray-500">{review.year}</p>}
           {stats?.scorePct != null && (
