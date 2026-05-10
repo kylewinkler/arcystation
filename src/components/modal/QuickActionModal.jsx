@@ -155,7 +155,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       {/* Watched status */}
       {isWatched ? (
         <button
-          onClick={openRating}
+          onClick={() => openRating()}
           className="w-full bg-purple-600/10 border border-purple-500/30 rounded-lg p-3 text-left hover:border-purple-500 transition-colors"
         >
           <div className="flex items-center gap-2">
