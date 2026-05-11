@@ -4,6 +4,7 @@ import { getUserProfile, getAllWatchedMovies, getAllWatchedTmdbIds } from '../li
 import { getGenreList } from '../lib/tmdb';
 import WatchedPoster from '../components/movies/WatchedPoster';
 import ReviewModal from '../components/modal/ReviewModal';
+import QuickActionModal from '../components/modal/QuickActionModal';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../context/AuthContext';
@@ -218,24 +219,54 @@ export default function WatchedByYear() {
         />
       )}
 
-      <ReviewModal
-        isOpen={!!selected}
-        onClose={() => setSelected(null)}
-        movie={selected}
-        reviewerProfile={profile}
-        onReactionChange={(newReactions) => {
-          setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
-          setAllMovies((prev) => prev.map((mv) =>
-            mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
-          ));
-        }}
-        onEdit={({ rating, note, reactions }) => {
-          setSelected((prev) => (prev ? { ...prev, rating, note, reactions } : prev));
-          setAllMovies((prev) => prev.map((mv) =>
-            mv.tmdbId === selected?.tmdbId ? { ...mv, rating, note, reactions } : mv
-          ));
-        }}
-      />
+      {user ? (
+        <QuickActionModal
+          isOpen={!!selected}
+          onClose={() => setSelected(null)}
+          movie={selected ? {
+            tmdbId: selected.tmdbId,
+            title: selected.title,
+            posterPath: selected.posterPath,
+            year: selected.year,
+            genreIds: selected.genreIds || [],
+            overview: selected.overview || '',
+          } : null}
+          user={user}
+          watched={myWatchedIds}
+          setWatched={setMyWatchedIds}
+          review={selected}
+          reviewerProfile={profile}
+          onReactionChange={(newReactions) => {
+            setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
+            setAllMovies((prev) => prev.map((mv) =>
+              mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
+            ));
+          }}
+          onEdit={({ rating, note, reactions }) => {
+            if (!selected || selected.uid !== user.uid) return;
+            setAllMovies((prev) => prev.map((mv) =>
+              mv.tmdbId === selected.tmdbId ? { ...mv, rating, note, reactions } : mv
+            ));
+          }}
+          onDelete={() => {
+            if (!selected || selected.uid !== user.uid) return;
+            setAllMovies((prev) => prev.filter((mv) => mv.tmdbId !== selected.tmdbId));
+          }}
+        />
+      ) : (
+        <ReviewModal
+          isOpen={!!selected}
+          onClose={() => setSelected(null)}
+          movie={selected}
+          reviewerProfile={profile}
+          onReactionChange={(newReactions) => {
+            setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
+            setAllMovies((prev) => prev.map((mv) =>
+              mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
+            ));
+          }}
+        />
+      )}
     </div>
   );
 }

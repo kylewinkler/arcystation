@@ -451,6 +451,42 @@ export async function markWatchedStandalone(uid, tmdbId, { rating, note, movieDa
       await removeMovieFromList(getWatchlistId(uid), tmdbId);
     }
   }
+
+  await syncWatchedAcrossUserLists(uid, tmdbId);
+}
+
+// On a mark-watched, mirror the watched state to every other list the user
+// tracks that contains this movie and currently has it unwatched. Lists where
+// the movie is already watched are left alone, and lists the user doesn't
+// track are ignored.
+async function syncWatchedAcrossUserLists(uid, tmdbId) {
+  const membersSnap = await getDocs(query(
+    collection(db, 'listMembers'),
+    where('uid', '==', uid)
+  ));
+  if (membersSnap.empty) return;
+
+  const listIds = membersSnap.docs.map((d) => d.data().listId);
+  const newlyWatchedListIds = [];
+
+  await Promise.all(listIds.map(async (listId) => {
+    const movieSnap = await getDoc(doc(db, 'lists', listId, 'movies', tmdbId));
+    if (!movieSnap.exists()) return;
+    const watchedRef = doc(db, 'listWatched', watchedDocId(uid, listId, tmdbId));
+    const watchedSnap = await getDoc(watchedRef);
+    if (watchedSnap.exists()) return;
+    await setDoc(watchedRef, {
+      uid,
+      listId,
+      tmdbId,
+      watchedAt: serverTimestamp(),
+    });
+    newlyWatchedListIds.push(listId);
+  }));
+
+  await Promise.all(newlyWatchedListIds.map((listId) =>
+    syncWatchedCount(uid, listId, { lastActivityAt: serverTimestamp() })
+  ));
 }
 
 export async function unmarkWatchedStandalone(uid, tmdbId) {

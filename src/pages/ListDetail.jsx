@@ -8,6 +8,7 @@ import {
   subscribeToProgress, subscribeToWatched, markWatched, unmarkWatched,
   copyList, getFriends, sendListInvite, getPendingInvitesForList,
   notifyFriends, createNotification, bulkMarkWatchedFromReviews,
+  removeMovieFromList,
 } from '../lib/firestore';
 import { useToast } from '../context/ToastContext';
 import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS, getMilestone } from '../lib/copy/lore';
@@ -331,6 +332,11 @@ export default function ListDetail() {
   const handleConfirmUnmark = async () => {
     await unmarkWatched(user.uid, id, unmarkModal);
     setUnmarkModal(null);
+  };
+
+  const handleRemoveFromList = async (tmdbId) => {
+    await removeMovieFromList(id, tmdbId);
+    showToast({ message: `Removed from "${list.title}"`, duration: 1500 });
   };
 
   if (copyingList || (loading && !list)) {
@@ -684,6 +690,8 @@ export default function ListDetail() {
           user={user}
           watched={allMyWatched}
           setWatched={setAllMyWatched}
+          currentList={isOwner && !isPrebuilt ? { id, title: list.title } : null}
+          onRemoveFromList={isOwner && !isPrebuilt ? handleRemoveFromList : undefined}
         />
       )}
 

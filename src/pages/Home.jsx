@@ -52,7 +52,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [popularMovies, setPopularMovies] = useState([]);
   const [watchedIds, setWatchedIds] = useState(new Set());
-  const [quickActionMovie, setQuickActionMovie] = useState(null);
+  const [quickAction, setQuickAction] = useState(null);
 
   useEffect(() => {
     load();
@@ -60,10 +60,52 @@ export default function Home() {
 
   function handlePosterClick(movie) {
     if (user) {
-      setQuickActionMovie(movie);
+      setQuickAction({ movie });
     } else {
       navigate(`/movie/${movie.tmdbId}`);
     }
+  }
+
+  function handleReviewClick({ review, profile }) {
+    if (!user) {
+      navigate(`/movie/${review.tmdbId}`);
+      return;
+    }
+    setQuickAction({
+      movie: {
+        tmdbId: review.tmdbId,
+        title: review.title,
+        posterPath: review.posterPath,
+        year: review.year,
+        genreIds: review.genreIds || [],
+      },
+      review,
+      profile,
+    });
+  }
+
+  function updateRecentReviewReactions(reviewerUid, tmdbId, newReactions) {
+    setRecentReviews((prev) => prev.map((entry) =>
+      entry.profile.uid === reviewerUid && entry.review.tmdbId === tmdbId
+        ? { ...entry, review: { ...entry.review, reactions: newReactions } }
+        : entry
+    ));
+  }
+
+  function updateRecentReviewOwn(tmdbId, { rating, note, reactions }) {
+    if (!user) return;
+    setRecentReviews((prev) => prev.map((entry) =>
+      entry.profile.uid === user.uid && entry.review.tmdbId === tmdbId
+        ? { ...entry, review: { ...entry.review, rating, note, reactions } }
+        : entry
+    ));
+  }
+
+  function removeRecentReviewOwn(tmdbId) {
+    if (!user) return;
+    setRecentReviews((prev) => prev.filter((entry) =>
+      !(entry.profile.uid === user.uid && entry.review.tmdbId === tmdbId)
+    ));
   }
 
   async function handleAcceptInvite(invite) {
@@ -351,13 +393,7 @@ export default function Home() {
                 review={review}
                 profile={profile}
                 stats={stats}
-                onClick={() => handlePosterClick({
-                  tmdbId: review.tmdbId,
-                  title: review.title,
-                  posterPath: review.posterPath,
-                  year: review.year,
-                  genreIds: review.genreIds || [],
-                })}
+                onClick={() => handleReviewClick({ review, profile })}
               />
             ))}
           </div>
@@ -425,12 +461,29 @@ export default function Home() {
 
       {user && (
         <QuickActionModal
-          isOpen={!!quickActionMovie}
-          onClose={() => setQuickActionMovie(null)}
-          movie={quickActionMovie}
+          isOpen={!!quickAction}
+          onClose={() => setQuickAction(null)}
+          movie={quickAction?.movie}
           user={user}
           watched={watchedIds}
           setWatched={setWatchedIds}
+          review={quickAction?.review}
+          reviewerProfile={quickAction?.profile}
+          onReactionChange={(newReactions) => {
+            if (!quickAction?.review) return;
+            updateRecentReviewReactions(quickAction.review.uid, quickAction.review.tmdbId, newReactions);
+            setQuickAction((prev) => prev?.review
+              ? { ...prev, review: { ...prev.review, reactions: newReactions } }
+              : prev);
+          }}
+          onEdit={({ rating, note, reactions }) => {
+            if (!quickAction?.movie?.tmdbId) return;
+            updateRecentReviewOwn(quickAction.movie.tmdbId, { rating, note, reactions });
+          }}
+          onDelete={() => {
+            if (!quickAction?.movie?.tmdbId) return;
+            removeRecentReviewOwn(quickAction.movie.tmdbId);
+          }}
         />
       )}
     </div>

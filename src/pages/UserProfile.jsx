@@ -7,12 +7,13 @@ import {
   getList, getAllWatchedMovies,
   getPinnedLists, pinList, unpinList, sortLists,
   getListMovies, getWatchedMovies, getPrebuiltLists,
-  getWatchlistId,
+  getWatchlistId, getAllWatchedTmdbIds,
 } from '../lib/firestore';
 import ListCard from '../components/lists/ListCard';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import ProfileReviews from '../components/profile/ProfileReviews';
 import ReviewModal from '../components/modal/ReviewModal';
+import QuickActionModal from '../components/modal/QuickActionModal';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import ProfileHeader from '../components/profile/ProfileHeader';
@@ -59,6 +60,7 @@ export default function UserProfile() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [myWatchedIds, setMyWatchedIds] = useState(new Set());
 
   const isOwner = user?.uid === uid;
   const tab = searchParams.get('tab') || 'all';
@@ -72,6 +74,11 @@ export default function UserProfile() {
     if (!uid) return;
     getAllWatchedMovies(uid).then(setAllWatchedMovies);
   }, [uid]);
+
+  useEffect(() => {
+    if (!user) return;
+    getAllWatchedTmdbIds(user.uid).then(setMyWatchedIds).catch(() => {});
+  }, [user]);
 
   // Reset page when tab changes
   useEffect(() => {
@@ -566,24 +573,54 @@ export default function UserProfile() {
         </button>
       )}
 
-      <ReviewModal
-        isOpen={!!selected}
-        onClose={() => setSelected(null)}
-        movie={selected}
-        reviewerProfile={profile}
-        onReactionChange={(newReactions) => {
-          setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
-          setAllWatchedMovies((prev) => prev.map((mv) =>
-            mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
-          ));
-        }}
-        onEdit={({ rating, note, reactions }) => {
-          setSelected((prev) => (prev ? { ...prev, rating, note, reactions } : prev));
-          setAllWatchedMovies((prev) => prev.map((mv) =>
-            mv.tmdbId === selected?.tmdbId ? { ...mv, rating, note, reactions } : mv
-          ));
-        }}
-      />
+      {user ? (
+        <QuickActionModal
+          isOpen={!!selected}
+          onClose={() => setSelected(null)}
+          movie={selected ? {
+            tmdbId: selected.tmdbId,
+            title: selected.title,
+            posterPath: selected.posterPath,
+            year: selected.year,
+            genreIds: selected.genreIds || [],
+            overview: selected.overview || '',
+          } : null}
+          user={user}
+          watched={myWatchedIds}
+          setWatched={setMyWatchedIds}
+          review={selected}
+          reviewerProfile={profile}
+          onReactionChange={(newReactions) => {
+            setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
+            setAllWatchedMovies((prev) => prev.map((mv) =>
+              mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
+            ));
+          }}
+          onEdit={({ rating, note, reactions }) => {
+            if (!selected || selected.uid !== user.uid) return;
+            setAllWatchedMovies((prev) => prev.map((mv) =>
+              mv.tmdbId === selected.tmdbId ? { ...mv, rating, note, reactions } : mv
+            ));
+          }}
+          onDelete={() => {
+            if (!selected || selected.uid !== user.uid) return;
+            setAllWatchedMovies((prev) => prev.filter((mv) => mv.tmdbId !== selected.tmdbId));
+          }}
+        />
+      ) : (
+        <ReviewModal
+          isOpen={!!selected}
+          onClose={() => setSelected(null)}
+          movie={selected}
+          reviewerProfile={profile}
+          onReactionChange={(newReactions) => {
+            setSelected((prev) => (prev ? { ...prev, reactions: newReactions } : prev));
+            setAllWatchedMovies((prev) => prev.map((mv) =>
+              mv.tmdbId === selected?.tmdbId ? { ...mv, reactions: newReactions } : mv
+            ));
+          }}
+        />
+      )}
     </div>
   );
 }

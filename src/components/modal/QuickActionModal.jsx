@@ -5,6 +5,7 @@ import RatingModal from './RatingModal';
 import AddToListModal from './AddToListModal';
 import StarRating from '../StarRating';
 import MovieScoreBadge from '../movie/MovieScoreBadge';
+import ReviewDisplay from '../ReviewDisplay';
 import { posterUrl } from '../../lib/tmdb';
 import {
   markWatchedStandalone, unmarkWatchedStandalone,
@@ -15,7 +16,10 @@ import { randomFrom, REVIEW_REACTIONS, RATING_ONLY_REACTIONS } from '../../lib/c
 import { getMilestone } from '../../lib/copy/lore';
 import ArcyReadTransmission from '../../assets/images/arcy-poses/arcy-read-transmission.png';
 
-export default function QuickActionModal({ isOpen, onClose, movie, user, watched, setWatched }) {
+export default function QuickActionModal({
+  isOpen, onClose, movie, user, watched, setWatched, currentList, onRemoveFromList,
+  review, reviewerProfile, onReactionChange, onEdit, onDelete,
+}) {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [mode, setMode] = useState('menu'); // 'menu' | 'lists' | 'rating'
@@ -58,11 +62,19 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
       rating: rating || null,
       note: note.trim() || null,
     });
+    onEdit?.({ rating: rating || null, note: note.trim() || null, reactions: {} });
   }
 
   async function handleDelete() {
     await unmarkWatchedStandalone(user.uid, movie.tmdbId);
     setWatched((prev) => { const s = new Set(prev); s.delete(movie.tmdbId); return s; });
+    onClose();
+    onDelete?.();
+  }
+
+  async function handleRemoveFromList() {
+    if (!onRemoveFromList) return;
+    await onRemoveFromList(movie.tmdbId);
     onClose();
   }
 
@@ -131,29 +143,41 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
     );
   }
 
+  const isOwnReview = !!review && user?.uid === review.uid;
+
   // ── Menu mode (default) ──
   return (
-    <BaseModal isOpen onClose={onClose}>
-      {/* Movie poster + title */}
-      <div className="flex items-center gap-3">
-        {movie.posterPath ? (
-          <img
-            src={posterUrl(movie.posterPath, 'w92')}
-            alt=""
-            className="w-12 h-18 rounded object-cover shrink-0"
-          />
-        ) : (
-          <div className="w-12 h-18 rounded bg-gray-800 shrink-0" />
-        )}
-        <div className="min-w-0">
-          <p className="text-white font-medium truncate">{movie.title}</p>
-          {movie.year && <p className="text-xs text-gray-500">{movie.year}</p>}
-          <div className="mt-0.5"><MovieScoreBadge tmdbId={movie.tmdbId} /></div>
+    <BaseModal isOpen onClose={onClose} maxWidth={review ? 'max-w-md' : 'max-w-sm'}>
+      {review ? (
+        <ReviewDisplay
+          movie={review}
+          reviewerProfile={reviewerProfile}
+          currentUserUid={user?.uid}
+          onEditClick={isOwnReview ? () => openRating() : undefined}
+          onReactionChange={onReactionChange}
+        />
+      ) : (
+        /* Movie poster + title */
+        <div className="flex items-center gap-3">
+          {movie.posterPath ? (
+            <img
+              src={posterUrl(movie.posterPath, 'w92')}
+              alt=""
+              className="w-12 h-18 rounded object-cover shrink-0"
+            />
+          ) : (
+            <div className="w-12 h-18 rounded bg-gray-800 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="text-white font-medium truncate">{movie.title}</p>
+            {movie.year && <p className="text-xs text-gray-500">{movie.year}</p>}
+            <div className="mt-0.5"><MovieScoreBadge tmdbId={movie.tmdbId} /></div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Watched status */}
-      {isWatched ? (
+      {/* Watched status — hidden when the modal is already showing the user's own review (redundant) */}
+      {!isOwnReview && (isWatched ? (
         <button
           onClick={() => openRating()}
           className="w-full bg-purple-600/10 border border-purple-500/30 rounded-lg p-3 text-left hover:border-purple-500 transition-colors"
@@ -190,7 +214,7 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
             <StarRating value={0} onChange={(v) => openRating(v)} size="md" />
           </span>
         </div>
-      )}
+      ))}
 
       {/* Add to list */}
       <button
@@ -228,6 +252,25 @@ export default function QuickActionModal({ isOpen, onClose, movie, user, watched
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
       </button>
+
+      {/* Remove from current list */}
+      {currentList && onRemoveFromList && (
+        <button
+          onClick={handleRemoveFromList}
+          className="group w-full flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 border border-gray-700 hover:border-red-500 px-3 py-2.5 rounded-lg transition-colors"
+        >
+          <svg
+            className="w-5 h-5 transition-all group-hover:drop-shadow-[0_0_6px_rgb(248,113,113)]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2" />
+          </svg>
+          <span className="truncate">Remove from "{currentList.title}"</span>
+        </button>
+      )}
     </BaseModal>
   );
 }

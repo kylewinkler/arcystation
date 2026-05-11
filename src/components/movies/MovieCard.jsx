@@ -5,11 +5,17 @@ import MovieScoreBadge from '../movie/MovieScoreBadge';
 
 export default function MovieCard({ movie, onRemove, watchedData, onToggleWatched, readonly, seenElsewhere, isFeatured, onToggleFeatured, onPosterClick }) {
   const isWatched = !!watchedData;
-  const isInteractive = onToggleWatched && !readonly;
+  const showWatchIndicator = onToggleWatched && !readonly;
+  const isCardClickable = !!onPosterClick;
 
   const handleCardClick = (e) => {
     if (e.target.closest('a') || e.target.closest('button')) return;
-    if (!isInteractive) return;
+    if (!isCardClickable) return;
+    onPosterClick(movie);
+  };
+
+  const handleIndicatorClick = (e) => {
+    e.stopPropagation();
     onToggleWatched(movie.tmdbId, !isWatched);
   };
 
@@ -27,11 +33,16 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
         isWatched || seenElsewhere
           ? 'bg-gray-800 shadow-[0_0_8px_var(--color-watched-glow)]'
           : 'bg-gray-900/50'
-      } ${isInteractive ? 'cursor-pointer hover:bg-gray-800/70' : ''}`}
+      } ${isCardClickable ? 'cursor-pointer hover:bg-gray-800/70' : ''}`}
     >
-      {/* Clickable watch indicator (replaces old checkbox) */}
-      {isInteractive && (
-        <div className="shrink-0 pt-1">
+      {/* Clickable watch indicator — the only thing that toggles watched */}
+      {showWatchIndicator && (
+        <button
+          type="button"
+          onClick={handleIndicatorClick}
+          className="shrink-0 pt-1"
+          aria-label={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+        >
           {isWatched ? (
             <div className="w-6 h-6 rounded-full bg-watched flex items-center justify-center">
               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -41,7 +52,7 @@ export default function MovieCard({ movie, onRemove, watchedData, onToggleWatche
           ) : (
             <div className="w-6 h-6 rounded-full border-2 border-gray-600 hover:border-purple-500 transition-colors" />
           )}
-        </div>
+        </button>
       )}
 
       <Link to={`/movie/${movie.tmdbId}`} className="shrink-0" onClick={onPosterClick ? handlePosterClick : (e) => e.stopPropagation()}>

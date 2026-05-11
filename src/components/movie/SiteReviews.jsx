@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import StarRating from '../StarRating';
+import ReviewModal from '../modal/ReviewModal';
 import { getMovieReviews } from '../../lib/firestore';
 import { useAuth } from '../../context/AuthContext';
 
@@ -11,6 +11,7 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState(null); // { review, profile }
 
   useEffect(() => {
     if (!tmdbId) return;
@@ -33,6 +34,17 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
   const visible = orderedReviews.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const showPager = orderedReviews.length > PAGE_SIZE;
 
+  function updateSelectedReactions(newReactions) {
+    setSelected((prev) => prev
+      ? { ...prev, review: { ...prev.review, reactions: newReactions } }
+      : prev);
+    setReviews((prev) => prev.map((r) =>
+      r.profile.uid === selected?.profile.uid
+        ? { ...r, review: { ...r.review, reactions: newReactions } }
+        : r
+    ));
+  }
+
   return (
     <div ref={ref}>
       <h2 className="text-md font-medium text-gray-400 mb-2">Site reviews</h2>
@@ -52,6 +64,7 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
                 review={review}
                 profile={profile}
                 isMine={user?.uid === profile.uid}
+                onClick={() => setSelected({ review, profile })}
               />
             ))}
           </div>
@@ -78,20 +91,29 @@ const SiteReviews = forwardRef(function SiteReviews({ tmdbId, stats, refreshKey 
           )}
         </>
       )}
+
+      <ReviewModal
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        movie={selected?.review}
+        reviewerProfile={selected?.profile}
+        hideMovieLink
+        onReactionChange={updateSelectedReactions}
+      />
     </div>
   );
 });
 
-function ReviewCard({ review, profile, isMine }) {
+function ReviewCard({ review, profile, isMine, onClick }) {
   const hasRating = review.rating > 0;
   const hasNote = !!review.note;
-  const [expanded, setExpanded] = useState(false);
   return (
-    <div className={`bg-gray-900/60 border border-gray-800 rounded-lg p-2.5 flex flex-col ${isMine ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`}>
-      <Link
-        to={`/user/${profile.uid}`}
-        className="flex items-center gap-2 group min-w-0"
-      >
+    <button
+      type="button"
+      onClick={onClick}
+      className={`bg-gray-900/60 border border-gray-800 hover:border-purple-500 rounded-lg p-2.5 flex flex-col text-left transition-colors ${isMine ? 'shadow-[0_0_8px_var(--color-watched-glow)]' : ''}`}
+    >
+      <div className="flex items-center gap-2 min-w-0">
         {profile.photoURL ? (
           <img
             src={profile.photoURL}
@@ -103,23 +125,19 @@ function ReviewCard({ review, profile, isMine }) {
             {profile.displayName?.[0]?.toUpperCase()}
           </div>
         )}
-        <span className="text-white text-xs font-medium truncate group-hover:text-purple-400 transition-colors">
+        <span className="text-white text-xs font-medium truncate">
           {profile.displayName}
         </span>
-      </Link>
+      </div>
       {hasRating && <div className="mt-1"><StarRating value={review.rating} size="sm" /></div>}
       {hasNote ? (
-        <button
-          type="button"
-          onClick={() => setExpanded((e) => !e)}
-          className={`text-gray-300 text-xs mt-1.5 italic text-left cursor-pointer hover:text-white transition-colors ${expanded ? '' : 'line-clamp-4'}`}
-        >
+        <p className="text-gray-300 text-xs mt-1.5 italic text-left line-clamp-4">
           "{review.note}"
-        </button>
+        </p>
       ) : (
         !hasRating && <p className="text-gray-500 text-xs mt-1.5">Watched it</p>
       )}
-    </div>
+    </button>
   );
 }
 
