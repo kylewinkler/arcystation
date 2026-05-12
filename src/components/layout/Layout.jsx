@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { searchMulti, posterUrl } from '../../lib/tmdb';
-import { getAllWatchedTmdbIds } from '../../lib/firestore';
+import { getAllWatchedTmdbIds, searchUsersByName } from '../../lib/firestore';
 import NotificationBadge from '../notifications/NotificationBadge';
 import QuickActionModal from '../modal/QuickActionModal';
 import ArcyPop from '../../assets/images/arcy-poses/arcy-popcorn.png';
@@ -55,15 +55,28 @@ export default function Layout({ children }) {
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await searchMulti(query);
-        setResults(res.slice(0, 8));
+        const [tmdbRes, userRes] = await Promise.all([
+          searchMulti(query),
+          user ? searchUsersByName(query) : Promise.resolve([]),
+        ]);
+        const users = userRes
+          .filter((u) => u.uid !== user?.uid)
+          .slice(0, 3)
+          .map((u) => ({
+            kind: 'user',
+            uid: u.uid,
+            displayName: u.displayName,
+            photoURL: u.photoURL,
+          }));
+        const remaining = Math.max(8 - users.length, 1);
+        setResults([...users, ...tmdbRes.slice(0, remaining)]);
       } catch (err) {
         console.error('Search failed:', err);
       }
       setSearching(false);
     }, 250);
     return () => clearTimeout(debounceRef.current);
-  }, [query]);
+  }, [query, user]);
 
   useEffect(() => {
     if (!searchOpen) return;
@@ -83,7 +96,9 @@ export default function Layout({ children }) {
   }
 
   function handleResultClick(item) {
-    if (item.kind === 'person') {
+    if (item.kind === 'user') {
+      navigate(`/user/${item.uid}`);
+    } else if (item.kind === 'person') {
       navigate(`/actor/${item.personId}`);
     } else if (user) {
       setQuickActionMovie(item);
@@ -189,6 +204,32 @@ export default function Layout({ children }) {
               ) : (
                 <ul className="max-h-[60vh] overflow-y-auto">
                   {results.map((item) => {
+                    if (item.kind === 'user') {
+                      return (
+                        <li key={`user-${item.uid}`}>
+                          <button
+                            onClick={() => handleResultClick(item)}
+                            className="w-full flex items-center gap-3 px-2 py-2 hover:bg-gray-800 rounded-lg transition-colors text-left"
+                          >
+                            {item.photoURL ? (
+                              <img
+                                src={item.photoURL}
+                                alt=""
+                                className="w-9 h-9 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold shrink-0">
+                                {item.displayName?.[0] || '?'}
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-white truncate">{item.displayName}</p>
+                              <p className="text-xs text-gray-500">User</p>
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    }
                     if (item.kind === 'person') {
                       return (
                         <li key={`person-${item.personId}`}>
