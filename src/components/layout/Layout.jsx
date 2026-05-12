@@ -1,5 +1,6 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
 import { searchMulti, posterUrl } from '../../lib/tmdb';
 import { getAllWatchedTmdbIds } from '../../lib/firestore';
@@ -39,11 +40,10 @@ export default function Layout({ children }) {
     if (user) getAllWatchedTmdbIds(user.uid).then(setWatched);
   }, [user]);
 
-  useEffect(() => {
-    if (searchOpen) {
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [searchOpen]);
+  function openSearch() {
+    flushSync(() => setSearchOpen(true));
+    inputRef.current?.focus();
+  }
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -110,12 +110,12 @@ export default function Layout({ children }) {
           alt="arcy logo popcorn"
           className="h-9 w-auto -translate-y-[1px]"
         />
-          Arcy Station
+          <span className={searchOpen ? 'hidden sm:inline' : ''}>Arcy Station</span>
         </Link>
           {!searchOpen && (
             <div className="flex items-center gap-4">
               <button
-                onClick={() => setSearchOpen(true)}
+                onClick={openSearch}
                 className="text-gray-300 hover:text-white transition-colors"
                 aria-label="Search movies"
               >
