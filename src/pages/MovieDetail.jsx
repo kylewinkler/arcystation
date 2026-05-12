@@ -22,7 +22,6 @@ import RatingModal from '../components/modal/RatingModal';
 import AddToListModal from '../components/modal/AddToListModal';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import FriendReviewsCarousel from '../components/FriendReviewsCarousel';
-import MovieActionsMenu from '../components/movie/MovieActionsMenu';
 import SiteReviews from '../components/movie/SiteReviews';
 import MoviePlot from '../components/movie/MoviePlot';
 import LoginPrompt from '../components/auth/LoginPrompt';
@@ -221,28 +220,9 @@ export default function MovieDetail() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <BackButton />
-      <div className="flex items-start justify-between gap-2 sm:hidden">
-        <h1 className="text-xl font-bold text-white leading-tight">
-          {movie.title} {movie.year && <span className="text-gray-400 font-normal">({movie.year})</span>}
-        </h1>
-        <MovieActionsMenu
-          isWatched={isWatched}
-          onMarkWatched={() => {
-            if (!user) {
-              setLoginPromptMessage('Sign in to rate.');
-              return;
-            }
-            openRatingModalWithValue(displayRating || 0);
-          }}
-          onAddToList={() => {
-            if (!user) {
-              setLoginPromptMessage('Sign in to add movies to your lists.');
-              return;
-            }
-            setAddListModal(true);
-          }}
-        />
-      </div>
+      <h1 className="text-xl font-bold text-white leading-tight sm:hidden">
+        {movie.title} {movie.year && <span className="text-gray-400 font-normal">({movie.year})</span>}
+      </h1>
       <div className="flex gap-4 sm:gap-6">
         {movie.posterPath ? (
           <img
@@ -256,28 +236,9 @@ export default function MovieDetail() {
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="hidden sm:flex items-start justify-between gap-2">
-            <h1 className="text-2xl font-bold text-white">
-              {movie.title} {movie.year && <span className="text-gray-400 font-normal">({movie.year})</span>}
-            </h1>
-            <MovieActionsMenu
-              isWatched={isWatched}
-              onMarkWatched={() => {
-                if (!user) {
-                  setLoginPromptMessage('Sign in to rate.');
-                  return;
-                }
-                openRatingModalWithValue(displayRating || 0);
-              }}
-              onAddToList={() => {
-                if (!user) {
-                  setLoginPromptMessage('Sign in to add movies to your lists.');
-                  return;
-                }
-                setAddListModal(true);
-              }}
-            />
-          </div>
+          <h1 className="text-2xl font-bold text-white hidden sm:block">
+            {movie.title} {movie.year && <span className="text-gray-400 font-normal">({movie.year})</span>}
+          </h1>
           <div className="flex flex-wrap gap-2 mt-2">
             {genres.map((g) => (
               <Link key={g.id} to={`/movies?genre=${g.id}`} className="text-xs bg-gray-800 text-gray-300 hover:text-purple-400 hover:bg-gray-700 px-2 py-1 rounded transition-colors">
@@ -314,27 +275,25 @@ export default function MovieDetail() {
               ))}
             </p>
           )}
-          {!displayRating && (
-            <button
-              onClick={() => {
-                if (!user) {
-                  setLoginPromptMessage('Sign in to rate.');
-                  return;
-                }
-                openRatingModalWithValue(0);
-              }}
-              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-orange-400 transition-colors mt-2"
+          <button
+            onClick={() => {
+              if (!user) {
+                setLoginPromptMessage('Sign in to rate.');
+                return;
+              }
+              openRatingModalWithValue(displayRating || 0);
+            }}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-orange-400 transition-colors mt-2"
+          >
+            <svg
+              className="w-4 h-4 text-orange-400 drop-shadow-[0_0_6px_rgb(251,146,60)]"
+              fill="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                className="w-4 h-4 text-orange-400 drop-shadow-[0_0_6px_rgb(251,146,60)]"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 2l2.928 6.94L22 9.83l-5.36 4.94L18.18 22 12 18.27 5.82 22l1.54-7.23L2 9.83l7.072-.89L12 2z" />
-              </svg>
-              Rate this movie
-            </button>
-          )}
+              <path d="M12 2l2.928 6.94L22 9.83l-5.36 4.94L18.18 22 12 18.27 5.82 22l1.54-7.23L2 9.83l7.072-.89L12 2z" />
+            </svg>
+            {displayRating ? 'Edit your rating' : 'Rate this movie'}
+          </button>
           <button
             onClick={() => {
               if (!user) {
