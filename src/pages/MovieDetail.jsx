@@ -241,9 +241,9 @@ export default function MovieDetail() {
           </h1>
           <div className="flex flex-wrap gap-2 mt-2">
             {genres.map((g) => (
-              <Link key={g.id} to={`/movies?genre=${g.id}`} className="text-xs bg-gray-800 text-gray-300 hover:text-purple-400 hover:bg-gray-700 px-2 py-1 rounded transition-colors">
+              <span key={g.id} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">
                 {g.name}
-              </Link>
+              </span>
             ))}
           </div>
           {runtime > 0 && (

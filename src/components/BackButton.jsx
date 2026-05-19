@@ -11,6 +11,9 @@ export default function BackButton({ to, label = 'Back' }) {
     );
   }
 
+  const idx = window.history.state?.idx ?? 0;
+  if (idx === 0) return null;
+
   return (
     <button
       onClick={() => navigate(-1)}

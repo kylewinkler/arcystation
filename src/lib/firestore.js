@@ -645,9 +645,23 @@ export async function recomputeMovieStats(tmdbId) {
         scorePct: Math.round((rated.reduce((s, r) => s + r.rating, 0) / rated.length) * 20),
         totalReviews: all.length,
       };
-  await setDoc(doc(db, 'movieStats', id), { ...stats, updatedAt: serverTimestamp() });
+  const meta = pickMovieMeta(all);
+  await setDoc(doc(db, 'movieStats', id), { ...stats, ...meta, updatedAt: serverTimestamp() }, { merge: true });
   movieStatsCache.set(id, stats);
   return stats;
+}
+
+// Pick a representative title/year/posterPath from a movie's reviews so the
+// movieStats doc can render a poster card without a separate review lookup.
+function pickMovieMeta(reviews) {
+  const meta = {};
+  for (const r of reviews) {
+    if (!meta.title && r.title) meta.title = r.title;
+    if (!meta.year && r.year) meta.year = r.year;
+    if (!meta.posterPath && r.posterPath) meta.posterPath = r.posterPath;
+    if (meta.title && meta.year && meta.posterPath) break;
+  }
+  return meta;
 }
 
 export async function getMovieReviewStats(tmdbId) {
@@ -718,11 +732,132 @@ export async function backfillMovieStats() {
           scorePct: Math.round((rated.reduce((s, r) => s + r.rating, 0) / rated.length) * 20),
           totalReviews: reviews.length,
         };
-    await setDoc(doc(db, 'movieStats', id), { ...stats, updatedAt: serverTimestamp() });
+    const meta = pickMovieMeta(reviews);
+    await setDoc(doc(db, 'movieStats', id), { ...stats, ...meta, updatedAt: serverTimestamp() }, { merge: true });
     movieStatsCache.set(id, stats);
     written++;
   }
   return { processed: snap.size, movies: written };
+}
+
+// ── Site-sorted movie discovery ──
+// Queries the movieStats aggregate collection so the discover page renders
+// without any TMDB roundtrip. Older stats docs predate the metadata fields
+// (title/year/posterPath); for those we fall back to a single review doc
+// per movie at read time and write the metadata back to movieStats so the
+// next read is fast.
+
+function mapStatsDoc(d) {
+  const data = d.data();
+  return {
+    tmdbId: d.id,
+    title: data.title || '',
+    year: data.year || '',
+    posterPath: data.posterPath ?? null,
+    count: data.count || 0,
+    scorePct: data.scorePct ?? null,
+    totalReviews: data.totalReviews || 0,
+  };
+}
+
+async function enrichMissingMeta(rows) {
+  const needed = rows.filter((r) => !r.title);
+  if (needed.length === 0) return rows;
+
+  const metaByTmdb = new Map();
+  await Promise.all(needed.map(async (r) => {
+    const snap = await getDocs(query(
+      collection(db, 'reviews'),
+      where('tmdbId', '==', r.tmdbId),
+      limit(1)
+    ));
+    if (snap.empty) return;
+    const rev = snap.docs[0].data();
+    if (!rev.title) return;
+    const meta = {
+      title: rev.title,
+      year: rev.year || '',
+      posterPath: rev.posterPath ?? null,
+    };
+    metaByTmdb.set(r.tmdbId, meta);
+    // Self-heal: write the metadata onto the stats doc so future reads skip
+    // this fallback. Fire-and-forget; failures are non-fatal.
+    setDoc(doc(db, 'movieStats', r.tmdbId), meta, { merge: true }).catch(() => {});
+  }));
+
+  return rows
+    .map((r) => {
+      if (r.title) return r;
+      const meta = metaByTmdb.get(r.tmdbId);
+      return meta ? { ...r, ...meta } : null;
+    })
+    .filter(Boolean);
+}
+
+// Most recently reviewed movies — pulls from the reviews collection directly
+// and dedupes by tmdbId. Doesn't depend on any movieStats field, so it works
+// out of the box without a backfill.
+export async function getLatestReviewedMovies(max = 40) {
+  const snap = await getDocs(query(
+    collection(db, 'reviews'),
+    orderBy('watchedAt', 'desc'),
+    limit(max * 3)
+  ));
+  const seen = new Set();
+  const movies = [];
+  for (const d of snap.docs) {
+    const r = d.data();
+    if (!r.tmdbId || !r.title) continue;
+    const id = String(r.tmdbId);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    movies.push({
+      tmdbId: id,
+      title: r.title,
+      year: r.year || '',
+      posterPath: r.posterPath ?? null,
+    });
+    if (movies.length >= max) break;
+  }
+  return movies;
+}
+
+export async function getMostReviewedMovies(max = 40) {
+  const snap = await getDocs(query(
+    collection(db, 'movieStats'),
+    orderBy('totalReviews', 'desc'),
+    limit(max + 20)
+  ));
+  const rows = snap.docs.map(mapStatsDoc);
+  const enriched = await enrichMissingMeta(rows);
+  return enriched.slice(0, max);
+}
+
+// Min review threshold prevents a single 5-star review from dominating the
+// "Highest" tab. Same idea on the "Lowest" side.
+const MIN_RATED_COUNT = 2;
+
+export async function getHighestRatedMovies(max = 40) {
+  const snap = await getDocs(query(
+    collection(db, 'movieStats'),
+    orderBy('scorePct', 'desc'),
+    limit(max + 40)
+  ));
+  const rows = snap.docs.map(mapStatsDoc).filter((m) => m.count >= MIN_RATED_COUNT);
+  const enriched = await enrichMissingMeta(rows);
+  return enriched.slice(0, max);
+}
+
+export async function getLowestRatedMovies(max = 40) {
+  const snap = await getDocs(query(
+    collection(db, 'movieStats'),
+    where('scorePct', '>', 0),
+    orderBy('scorePct', 'asc'),
+    limit(max + 40)
+  ));
+  const rows = snap.docs.map(mapStatsDoc).filter((m) => m.count >= MIN_RATED_COUNT);
+  const enriched = await enrichMissingMeta(rows);
+  return enriched.slice(0, max);
 }
 
 // Site-wide reviews for a movie, with reviewer profiles attached. Sorted by
