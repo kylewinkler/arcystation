@@ -29,7 +29,9 @@
       "Bash(git commit -m ' *)",
       "Bash(echo \"exit: $?\")",
       "Read(//c/Users/winks/.claude/**)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(cd && pwd)",
+      "Bash(git -C C:/Users/winks/approot/movies status -s)"
     ]
   }
 }

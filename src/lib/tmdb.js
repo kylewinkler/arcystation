@@ -96,11 +96,18 @@ export async function discoverMovies({ tab = 'popular', genre, year, page = 1 } 
     url = `${BASE_URL}/movie/now_playing?api_key=${API_KEY}&page=${page}`;
   } else if (tab === 'top_rated') {
     url = `${BASE_URL}/movie/top_rated?api_key=${API_KEY}&page=${page}`;
+  } else if (tab === 'upcoming') {
+    // TMDB's /movie/upcoming overlaps heavily with /movie/now_playing — it
+    // returns the current theatrical window rather than future releases.
+    // Use /discover with primary_release_date.gte=tomorrow to get only films
+    // that haven't released yet, sorted by soonest first.
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&page=${page}&sort_by=primary_release_date.asc&include_adult=false&with_release_type=2|3&primary_release_date.gte=${tomorrow}`;
   } else {
     url = `${BASE_URL}/movie/popular?api_key=${API_KEY}&page=${page}`;
   }
   // For popular/top_rated we can use discover endpoint to support filters
-  if ((genre || year) && tab !== 'now_playing') {
+  if ((genre || year) && tab !== 'now_playing' && tab !== 'upcoming') {
     url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&page=${page}&sort_by=${tab === 'top_rated' ? 'vote_average.desc&vote_count.gte=300' : 'popularity.desc'}&include_adult=false`;
     if (genre) url += `&with_genres=${genre}`;
     if (year) url += `&primary_release_year=${year}`;

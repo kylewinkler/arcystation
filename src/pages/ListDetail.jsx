@@ -19,6 +19,7 @@ import { db } from '../lib/firebase';
 import { getGenreList } from '../lib/tmdb';
 import MovieCard from '../components/movies/MovieCard';
 import ProgressBar from '../components/lists/ProgressBar';
+import ListComments from '../components/lists/ListComments';
 import StarRating from '../components/StarRating';
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
@@ -670,6 +671,12 @@ export default function ListDetail() {
         >
           Load more ({filteredMovies.length - visibleCount} remaining)
         </button>
+      )}
+
+      {/* Comments — visible to the creator and anyone with a member doc.
+          Leaving the list deletes the member doc and revokes access. */}
+      {user && !isWatchlist && (isOwner || !!myProgress) && (
+        <ListComments listId={id} listTitle={list.title} user={user} isOwner={isOwner} />
       )}
 
       <RatingModal

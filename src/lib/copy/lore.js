@@ -37,15 +37,14 @@ export const LOADING_LINES = [
 
 export const REVIEW_REACTIONS = [
   'Arcy reads this twice.',
-  'Filed carefully in the archive.',
+  'Filed in the archive.',
   'A new scratch on the wall.',
-  'The receiver glows warm.',
-  'Arcy holds the page a moment longer.',
-  'Catalogued. Arcy lingers on the words.',
-  'Another signal from the void. He files it gently.',
+  'Catalogued.',
+  'Another signal from the void. Filed.',
   'Arcy matches it to the reel on the shelf.',
+  'Logged on the console.',
+  'Arcy reads it through once more.',
   'The station feels less quiet.',
-  'Arcy traces the words with his claw.',
 ];
 
 // Subset for when user rates but leaves no note — briefer, lighter
@@ -96,7 +95,7 @@ export const MILESTONES = [
   {
     count: 100,
     title: 'One hundred transmission sent!',
-    subtitle: 'The scratches on the wall have spread past the cot, down the corridor. Arcy looks down at his heart star. It glows brighter.',
+    subtitle: 'The scratches on the wall have spread past the cot, down the corridor.',
   },
   {
     count: 250,
@@ -119,11 +118,11 @@ export const MILESTONES = [
 // Shown when a user pins a list. Arcy holding the star.
 
 export const PIN_REACTIONS = [
-  'Arcy holds this one a little closer.',
   'Set on the shelf by the window. Where he can see it.',
-  'Arcy cradles the star. This one matters.',
   'Moved to the front of the archive.',
-  'The star glows warm in his paws.',
+  'Arcy keeps this one within reach.',
+  'Marked. Arcy will return to it.',
+  'Filed where he won\'t lose track of it.',
 ];
 
 // Special line for the very first pin ever

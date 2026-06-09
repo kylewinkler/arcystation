@@ -223,6 +223,17 @@ export default function NotificationItem({ notification, profile, onFriendAction
       );
       link = notification.fromUid ? `/user/${notification.fromUid}` : null;
       break;
+    case 'list_comment':
+      icon = '💬';
+      text = (
+        <>
+          <span className="text-white font-medium">{profile?.displayName}</span>
+          {' commented on '}
+          <span className="text-white font-medium">{data.listTitle}</span>
+        </>
+      );
+      link = data.listId ? `/lists/${data.listId}` : null;
+      break;
     case 'review_reaction':
       icon = data.reaction === 'up' ? '👍' : data.reaction === 'wow' ? '😮' : '👎';
       text = (
@@ -266,6 +277,11 @@ export default function NotificationItem({ notification, profile, onFriendAction
               </p>
             )}
           </div>
+        )}
+        {type === 'list_comment' && data.commentPreview && (
+          <p className="text-xs text-gray-400 italic line-clamp-2 border-l-2 border-gray-700 pl-2 mt-1.5">
+            "{data.commentPreview}"
+          </p>
         )}
         {type === 'watched_movie' && !isConsolidated && data.tmdbId && currentUserUid && (
           <ReviewReactions

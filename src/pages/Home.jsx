@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  getUserAllProgress, getList, getUserProfile, getListMovies, getWatchedMovies,
+  getUserAllProgress, getList, getUserProfile,
   getPendingListInvites, acceptListInvite, declineListInvite,
-  getAllWatchedTmdbIds, reconcileUserWatchedCounts,
-  getWatchedInfo, getThrowbackReview, getRecentSiteReviews,
+  getAllWatchedTmdbIds, getAllWatchedMovies, reconcileUserWatchedCounts,
+  getThrowbackReview, getRecentSiteReviews,
 } from '../lib/firestore';
-import { discoverMovies, posterUrl } from '../lib/tmdb';
+import { discoverMovies, getRecommendations, posterUrl } from '../lib/tmdb';
 import QuickActionModal from '../components/modal/QuickActionModal';
 import SuggestionCard from '../components/movies/SuggestionCard';
 import StarRating from '../components/StarRating';
@@ -15,37 +15,11 @@ import MoviePosterTile from '../components/movies/MoviePosterTile';
 import LoadingScreen from '../components/loading/Loading';
 import NoComms from '../assets/images/arcy-scenes/no-comms.png';
 
-function pickRandom(arr) {
-  return arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
-}
-
-// ISO week key like "2026-W17" — stable Monday-to-Sunday bucket for the weekly pick.
-function getWeekKey(date = new Date()) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${weekNum}`;
-}
-
-function weekPickStorageKey(uid) {
-  return `weekPick_${uid}`;
-}
-
-const currentYear = new Date().getFullYear();
-function isReleased(m) {
-  if (m.releaseDate) return new Date(m.releaseDate) <= new Date();
-  if (m.release_date) return new Date(m.release_date) <= new Date();
-  return !m.year || Number(m.year) < currentYear;
-}
-
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [invites, setInvites] = useState([]);
-  const [weekPick, setWeekPick] = useState(null);
-  const [weekPickReview, setWeekPickReview] = useState(null);
+  const [mightLike, setMightLike] = useState(null);
   const [throwback, setThrowback] = useState(null);
   const [recentReviews, setRecentReviews] = useState([]);
   const [hasLists, setHasLists] = useState(false);
@@ -138,7 +112,7 @@ export default function Home() {
       return;
     }
 
-    // Logged-in-only — week pick, invites, throwback, watched glow, hasLists.
+    // Logged-in-only — recs, invites, throwback, watched glow, hasLists.
 
     // One-time per session: heal any watchedCount corruption from the earlier
     // increment-on-missing-field bug. Runs before getUserAllProgress so the
@@ -180,71 +154,24 @@ export default function Home() {
     const valid = enriched.filter(Boolean);
     setHasLists(valid.length > 0);
 
-    // Lists that still have unwatched movies — power the week-pick
-    // (any list with something unwatched is fair game).
-    const withUnwatched = valid.filter(
-      (item) => item.watchedCount < (item.list.movieCount || 0)
-    );
-
-    const movieData = {};
-    const watchedData = {};
-    await Promise.all(
-      withUnwatched.map(async (item) => {
-        const [movies, watched] = await Promise.all([
-          getListMovies(item.listId),
-          getWatchedMovies(user.uid, item.listId),
-        ]);
-        movieData[item.listId] = movies;
-        watchedData[item.listId] = watched;
-      })
-    );
-
-    // This week's pick: stable per ISO week, persisted to localStorage so the
-    // user sees the same movie all week even after watching it.
-    const weekKey = getWeekKey();
-    const storageKey = weekPickStorageKey(user.uid);
-    let pick = null;
+    // You might like: seed TMDB recommendations off the user's highest-rated
+    // watched film (fall back to a random watched film if they haven't rated
+    // anything). Skip silently if they haven't watched anything yet.
     try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const fresh = parsed?.weekKey === weekKey && parsed.movie?.tmdbId;
-        // Self-heal: if the cached pick references a list the user is no
-        // longer in (left/deleted), regenerate instead of showing stale info.
-        const listStillValid =
-          parsed?.listId && valid.some((v) => v.listId === parsed.listId);
-        if (fresh && listStillValid) pick = parsed;
-      }
-    } catch { /* corrupt entry — regenerate */ }
-
-    if (!pick) {
-      const shuffledLists = [...withUnwatched].sort(() => Math.random() - 0.5);
-      for (const item of shuffledLists) {
-        const candidates = (movieData[item.listId] || [])
-          .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
-          .filter(isReleased);
-        if (candidates.length > 0) {
-          const movie = pickRandom(candidates);
-          pick = {
-            weekKey,
-            movie,
-            listTitle: item.list?.title || '',
-            listId: item.listId || '',
-          };
-          try { localStorage.setItem(storageKey, JSON.stringify(pick)); } catch { /* quota — ignore */ }
-          break;
+      const allWatched = await getAllWatchedMovies(user.uid);
+      if (allWatched.length > 0) {
+        const rated = allWatched.filter((m) => m.rating > 0).sort((a, b) => b.rating - a.rating);
+        const seed = rated[0] || allWatched[Math.floor(Math.random() * allWatched.length)];
+        if (seed?.tmdbId) {
+          const recs = await getRecommendations(seed.tmdbId);
+          const unseen = recs.filter((m) => !ids.has(m.tmdbId));
+          if (unseen.length > 0) {
+            setMightLike({ movie: unseen[0], seedTitle: seed.title || '' });
+          }
         }
       }
-    }
-
-    if (pick) {
-      setWeekPick(pick);
-      if (ids.has(pick.movie.tmdbId)) {
-        try {
-          const info = await getWatchedInfo(user.uid, pick.movie.tmdbId);
-          if (info) setWeekPickReview(info);
-        } catch { /* non-fatal */ }
-      }
+    } catch (err) {
+      console.error('Failed to load recs:', err);
     }
 
     const throwbackReview = await getThrowbackReview(user.uid).catch(() => null);
@@ -255,10 +182,9 @@ export default function Home() {
 
   if (loading) return <LoadingScreen />;
 
-  const pickWatched = !!weekPick && watchedIds.has(weekPick.movie.tmdbId);
   const hasAnyAction =
     invites.length > 0 ||
-    weekPick ||
+    mightLike ||
     throwback;
 
   return (
@@ -300,64 +226,15 @@ export default function Home() {
         </div>
       )}
 
-      {/* Hero: This week's pick — logged-in only, top of page */}
-      {user && weekPick && (
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-            {pickWatched ? "You watched this week's pick" : 'Not sure what to watch?'}
-          </p>
-          <button
-            type="button"
-            onClick={() => handlePosterClick(weekPick.movie)}
-            className="block w-full text-left group"
-          >
-            <div
-              className={
-                pickWatched
-                  ? 'relative rounded-xl overflow-hidden bg-gray-900 border border-orange-500 shadow-[0_0_30px_-5px_rgba(249,115,22,0.6)] transition-colors'
-                  : 'relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 group-hover:border-purple-500 transition-colors'
-              }
-            >
-              {weekPick.movie.posterPath ? (
-                <div
-                  className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl"
-                  style={{ backgroundImage: `url(${posterUrl(weekPick.movie.posterPath, 'w500')})` }}
-                />
-              ) : null}
-              <div className="relative flex items-center gap-4 p-3">
-                {weekPick.movie.posterPath ? (
-                  <img
-                    src={posterUrl(weekPick.movie.posterPath, 'w185')}
-                    alt={weekPick.movie.title}
-                    className="w-16 h-24 rounded object-cover shrink-0 shadow-lg"
-                  />
-                ) : (
-                  <div className="w-16 h-24 rounded bg-gray-800 shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-medium mb-0.5 ${pickWatched ? 'text-orange-400' : 'text-yellow-400/90'}`}>
-                    {pickWatched ? '🍿 Your pick this week' : "🎬 This week's pick"}
-                  </p>
-                  <p className="text-white font-medium truncate">
-                    {weekPick.movie.title}
-                    {weekPick.movie.year && (
-                      <span className="text-gray-400 font-normal"> ({weekPick.movie.year})</span>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">from {weekPick.listTitle}</p>
-                  {pickWatched && weekPickReview && (weekPickReview.rating || weekPickReview.note) && (
-                    <div className="mt-2">
-                      {weekPickReview.rating > 0 && <StarRating value={weekPickReview.rating} size="sm" />}
-                      {weekPickReview.note && (
-                        <p className="text-gray-300 text-xs italic mt-1 line-clamp-2">"{weekPickReview.note}"</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </button>
-        </div>
+      {/* You might like — logged-in only, top of page */}
+      {user && mightLike && (
+        <SuggestionCard
+          movie={mightLike.movie}
+          label="You might like"
+          labelColor="text-purple-400/80"
+          sublabel={mightLike.seedTitle ? `because you liked ${mightLike.seedTitle}` : undefined}
+          onClick={handlePosterClick}
+        />
       )}
 
       {/* Popular movies — everyone */}

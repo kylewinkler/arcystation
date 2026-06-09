@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { searchMovies, getRecommendations } from '../lib/tmdb';
+import { searchMovies, discoverMovies } from '../lib/tmdb';
 import {
   getAllWatchedTmdbIds,
-  getAllWatchedMovies,
   getLatestReviewedMovies,
   getMostReviewedMovies,
   getHighestRatedMovies,
@@ -13,25 +12,36 @@ import {
 import LoadingScreen from '../components/loading/Loading';
 import NotFound from '../components/not-found/NotFound';
 import { DISCOVER_NO_RESULTS } from '../lib/copy/empty';
-import SuggestionCard from '../components/movies/SuggestionCard';
 import MoviePosterTile from '../components/movies/MoviePosterTile';
 import QuickActionModal from '../components/modal/QuickActionModal';
 
-const DISCOVER_TABS = [
+const SECTIONS = [
+  { key: 'movies', label: 'Movies' },
+  { key: 'reviews', label: 'Reviews' },
+];
+
+const MOVIE_PILLS = [
+  { key: 'popular', label: 'Popular' },
+  { key: 'now_playing', label: 'Now Playing' },
+  { key: 'top_rated', label: 'Top Rated' },
+  { key: 'upcoming', label: 'Upcoming' },
+];
+
+const REVIEW_PILLS = [
   { key: 'latest_reviewed', label: 'Latest' },
-  { key: 'most_reviewed', label: 'Popular' },
+  { key: 'most_reviewed', label: 'Most Reviewed' },
   { key: 'highest_rated', label: 'Highest' },
   { key: 'lowest_rated', label: 'Lowest' },
 ];
 
-const TAB_FETCHERS = {
+const REVIEW_FETCHERS = {
   latest_reviewed: getLatestReviewedMovies,
   most_reviewed: getMostReviewedMovies,
   highest_rated: getHighestRatedMovies,
   lowest_rated: getLowestRatedMovies,
 };
 
-const STORAGE_KEY = 'movies_discover_state_v3';
+const STORAGE_KEY = 'movies_discover_state_v4';
 const SCROLL_KEY = 'movies_scroll_y';
 
 function getSavedState() {
@@ -42,25 +52,27 @@ function getSavedState() {
 }
 
 export default function Movies() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [restored] = useState(() => getSavedState());
   const didRestore = !!restored?.movies?.length;
   const hasRestoredScroll = useRef(false);
 
-  const [tab, setTab] = useState(restored?.tab || 'latest_reviewed');
+  const [section, setSection] = useState(restored?.section || null);
+  const [moviesPill, setMoviesPill] = useState(restored?.moviesPill || 'popular');
+  const [reviewsPill, setReviewsPill] = useState(restored?.reviewsPill || 'latest_reviewed');
   const [movies, setMovies] = useState(restored?.movies || []);
   const [loading, setLoading] = useState(!didRestore);
   const [search, setSearch] = useState(restored?.search || '');
   const [watched, setWatched] = useState(new Set());
-  const [recs, setRecs] = useState([]);
-  const [recsLoaded, setRecsLoaded] = useState(false);
-  const [recSeedTitle, setRecSeedTitle] = useState('');
   const searchDebounce = useRef(null);
   const mountedRef = useRef(false);
 
   const [quickActionMovie, setQuickActionMovie] = useState(null);
+
+  const activePill = section === 'reviews' ? reviewsPill : moviesPill;
+  const pillsForSection = section === 'reviews' ? REVIEW_PILLS : MOVIE_PILLS;
 
   function handleMovieClick(movie) {
     if (user) {
@@ -70,37 +82,32 @@ export default function Movies() {
     }
   }
 
+  function setPill(pillKey) {
+    if (section === 'reviews') setReviewsPill(pillKey);
+    else setMoviesPill(pillKey);
+  }
+
+  // Once auth resolves, fix the default section if the user didn't have one
+  // restored from session — logged-in users land on Reviews, everyone else
+  // on Movies. We never auto-flip after this initial decision, so a
+  // mid-session login doesn't yank the user off their chosen section.
+  useEffect(() => {
+    if (authLoading || section) return;
+    setSection(user ? 'reviews' : 'movies');
+  }, [authLoading, user, section]);
+
   useEffect(() => {
     if (user) getAllWatchedTmdbIds(user.uid).then(setWatched);
   }, [user]);
 
   useEffect(() => {
-    if (!user || recsLoaded) return;
-    getAllWatchedMovies(user.uid).then(async (all) => {
-      if (all.length === 0) { setRecsLoaded(true); return; }
-      const rated = all.filter((m) => m.rating > 0).sort((a, b) => b.rating - a.rating);
-      const seed = rated[0] || all[Math.floor(Math.random() * all.length)];
-      if (!seed?.tmdbId) { setRecsLoaded(true); return; }
-      try {
-        const results = await getRecommendations(seed.tmdbId);
-        const unseen = results.filter((m) => !watched.has(m.tmdbId));
-        setRecs(unseen.slice(0, 10));
-        setRecSeedTitle(seed.title || '');
-      } catch (err) {
-        console.error('Failed to load recs:', err);
-      }
-      setRecsLoaded(true);
-    });
-  }, [user, watched]);
-
-  useEffect(() => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || !section) return;
     if (search.trim()) return;
     loadTab();
-  }, [tab]);
+  }, [section, moviesPill, reviewsPill]);
 
   useEffect(() => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || !section) return;
     clearTimeout(searchDebounce.current);
     if (!search.trim()) {
       loadTab();
@@ -111,14 +118,16 @@ export default function Movies() {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (!didRestore) loadTab();
+    if (!didRestore && section) loadTab();
     return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
-    if (!mountedRef.current || loading) return;
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ tab, movies, search }));
-  }, [movies, tab, search, loading]);
+    if (!mountedRef.current || loading || !section) return;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      section, moviesPill, reviewsPill, movies, search,
+    }));
+  }, [movies, section, moviesPill, reviewsPill, search, loading]);
 
   useEffect(() => {
     let ticking = false;
@@ -146,9 +155,13 @@ export default function Movies() {
   async function loadTab() {
     setLoading(true);
     try {
-      const fetcher = TAB_FETCHERS[tab];
-      const results = await fetcher(40);
-      setMovies(results);
+      if (section === 'reviews') {
+        const fetcher = REVIEW_FETCHERS[reviewsPill];
+        setMovies(await fetcher(40));
+      } else {
+        const { movies: results } = await discoverMovies({ tab: moviesPill, page: 1 });
+        setMovies(results);
+      }
     } catch (err) {
       console.error('Failed to load movies:', err);
     }
@@ -185,15 +198,6 @@ export default function Movies() {
         )}
       </div>
 
-      {recs.length > 0 && !search.trim() && (
-        <SuggestionCard
-          movie={recs[0]}
-          label="You might like"
-          labelColor="text-purple-400/80"
-          sublabel={recSeedTitle ? `because you liked ${recSeedTitle}` : undefined}
-        />
-      )}
-
       <input
         type="text"
         value={search}
@@ -202,21 +206,39 @@ export default function Movies() {
         className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
       />
 
-      {!search.trim() && (
-        <div className="flex gap-1 bg-gray-800/50 rounded-lg p-1">
-          {DISCOVER_TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                tab === t.key
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-500 hover:text-white'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+      {!search.trim() && section && (
+        <div className="space-y-3">
+          <div className="flex gap-1 bg-gray-800/50 rounded-lg p-1">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setSection(s.key)}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                  section === s.key
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-500 hover:text-white'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+            {pillsForSection.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPill(p.key)}
+                className={`px-3 py-1 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
+                  activePill === p.key
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:text-white'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

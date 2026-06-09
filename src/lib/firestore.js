@@ -165,6 +165,14 @@ export async function deleteList(listId) {
     watchedSnap.docs.forEach((d) => wBatch.delete(d.ref));
     await wBatch.commit();
   }
+
+  // Delete all listComments for this list
+  const commentsSnap = await getDocs(query(collection(db, 'listComments'), where('listId', '==', listId)));
+  if (!commentsSnap.empty) {
+    const cBatch = writeBatch(db);
+    commentsSnap.docs.forEach((d) => cBatch.delete(d.ref));
+    await cBatch.commit();
+  }
   invalidateListCache(listId);
 }
 
@@ -413,6 +421,60 @@ export function subscribeToWatched(uid, listId, callback) {
       map[data.tmdbId] = data;
     });
     callback(map);
+  });
+}
+
+// ── List Comments ──
+// Discussion thread on a list. Access is gated to the list creator and users
+// with a `listMembers` doc — leaving the list revokes access via the rules.
+
+export async function addListComment(uid, listId, text) {
+  const ref = await addDoc(collection(db, 'listComments'), {
+    uid,
+    listId,
+    text,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function deleteListComment(commentId) {
+  await deleteDoc(doc(db, 'listComments', commentId));
+}
+
+// Notify every list member (except the commenter) that a new comment landed.
+// The list creator is included because they always have a listMembers doc.
+export async function notifyListCommentRecipients(commenterUid, listId, listTitle, commentText) {
+  const membersSnap = await getDocs(query(
+    collection(db, 'listMembers'),
+    where('listId', '==', listId)
+  ));
+  const recipients = membersSnap.docs
+    .map((d) => d.data().uid)
+    .filter((uid) => uid && uid !== commenterUid);
+  if (recipients.length === 0) return;
+
+  const preview = commentText.length > 140 ? `${commentText.slice(0, 140).trimEnd()}…` : commentText;
+  await Promise.all(recipients.map((toUid) =>
+    createNotification('list_comment', commenterUid, toUid, {
+      listId,
+      listTitle,
+      commentPreview: preview,
+    })
+  ));
+}
+
+export function subscribeToListComments(listId, callback) {
+  const q = query(
+    collection(db, 'listComments'),
+    where('listId', '==', listId)
+  );
+  return onSnapshot(q, (snap) => {
+    const comments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    comments.sort(
+      (a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)
+    );
+    callback(comments);
   });
 }
 

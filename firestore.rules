@@ -78,6 +78,40 @@ service cloud.firestore {
       );
     }
 
+    // Per-list comment threads. Only the list creator + users with a
+    // `listMembers` doc may read or write. Leaving the list (which deletes
+    // that membership doc) revokes access here automatically.
+    match /listComments/{commentId} {
+      function isListMember(listId) {
+        return signedIn() &&
+          exists(/databases/$(database)/documents/listMembers/$(request.auth.uid + '__' + listId));
+      }
+
+      allow read: if signedIn() && (
+        isListMember(resource.data.listId) ||
+        listOwner(resource.data.listId)
+      );
+      allow create: if signedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        (
+          isListMember(request.resource.data.listId) ||
+          listOwner(request.resource.data.listId)
+        );
+      allow update: if signedIn() &&
+        resource.data.uid == request.auth.uid &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.listId == resource.data.listId &&
+        (
+          isListMember(resource.data.listId) ||
+          listOwner(resource.data.listId)
+        );
+      allow delete: if signedIn() && (
+        resource.data.uid == request.auth.uid ||
+        listOwner(resource.data.listId) ||
+        !exists(/databases/$(database)/documents/lists/$(resource.data.listId))
+      );
+    }
+
     // Reviews (global "watched" + ratings + reactions).
     // Doc id: `${uid}__${tmdbId}`. Owner controls the review; anyone signed in
     // may add or remove ONLY their own reaction key under `reactions.<uid>`.

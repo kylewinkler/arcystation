@@ -7,10 +7,12 @@ import {
   getList, getAllWatchedMovies,
   getPinnedLists, pinList, unpinList, sortLists,
   getListMovies, getWatchedMovies, getPrebuiltLists,
-  getWatchlistId, getAllWatchedTmdbIds,
+  getWatchlistId, getAllWatchedTmdbIds, getWatchedInfo,
 } from '../lib/firestore';
+import { posterUrl } from '../lib/tmdb';
 import ListCard from '../components/lists/ListCard';
 import SuggestionCard from '../components/movies/SuggestionCard';
+import StarRating from '../components/StarRating';
 import ProfileReviews from '../components/profile/ProfileReviews';
 import ReviewModal from '../components/modal/ReviewModal';
 import QuickActionModal from '../components/modal/QuickActionModal';
@@ -37,6 +39,22 @@ function isReleased(m) {
   return !m.year || Number(m.year) < currentYear;
 }
 
+// ISO week key like "2026-W17" — stable Monday-to-Sunday bucket for the
+// weekly pick. The pick stays the same all week even after the user watches
+// it (we just swap to the "you watched it" variant).
+function getWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${weekNum}`;
+}
+
+function weekPickStorageKey(uid) {
+  return `weekPick_${uid}`;
+}
+
 export default function UserProfile() {
   const { uid } = useParams();
   const { user, logout } = useAuth();
@@ -51,7 +69,9 @@ export default function UserProfile() {
   const [continueItem, setContinueItem] = useState(null);
   const [startWatching, setStartWatching] = useState(null);
   const [almostDone, setAlmostDone] = useState(null);
-  const [watchlistItem, setWatchlistItem] = useState(null);
+  const [weekPick, setWeekPick] = useState(null);
+  const [weekPickReview, setWeekPickReview] = useState(null);
+  const [quickActionMovie, setQuickActionMovie] = useState(null);
   const [newInLists, setNewInLists] = useState(null);
   const [page, setPage] = useState(1);
   const [isFriend, setIsFriend] = useState(false);
@@ -79,6 +99,22 @@ export default function UserProfile() {
     if (!user) return;
     getAllWatchedTmdbIds(user.uid).then(setMyWatchedIds).catch(() => {});
   }, [user]);
+
+  // Keep the week-pick's "watched" variant in sync with myWatchedIds — if the
+  // user marks the pick watched from the QuickActionModal we need to pull the
+  // rating/note in so the hero flips to the orange "you watched it" state
+  // without a page reload.
+  useEffect(() => {
+    if (!user || !weekPick) return;
+    const watched = myWatchedIds.has(weekPick.movie.tmdbId);
+    if (watched && !weekPickReview) {
+      getWatchedInfo(user.uid, weekPick.movie.tmdbId)
+        .then((info) => { if (info) setWeekPickReview(info); })
+        .catch(() => {});
+    } else if (!watched && weekPickReview) {
+      setWeekPickReview(null);
+    }
+  }, [myWatchedIds, weekPick, user]);
 
   // Reset page when tab changes
   useEffect(() => {
@@ -164,16 +200,21 @@ export default function UserProfile() {
       // representatives. Shows the user something actionable at the top of the
       // page without making them scan list cards.
       const watchlistId = getWatchlistId(uid);
-      const watchlistEntry = validLists.find((item) => item.listId === watchlistId);
-      const withUnwatched = validLists.filter(
-        (item) => item.listId !== watchlistId && item.watchedCount < (item.list.movieCount || 0)
+      // allUnwatched includes the Watchlist — the week pick can draw from
+      // any list with something unwatched. withUnwatched excludes it for the
+      // Continue / Start watching / Almost done tiles, which frame each list
+      // as a project to make progress on (the Watchlist is save-for-later,
+      // not a project).
+      const allUnwatched = validLists.filter(
+        (item) => item.watchedCount < (item.list.movieCount || 0)
       );
+      const withUnwatched = allUnwatched.filter((item) => item.listId !== watchlistId);
       const allIncomplete = withUnwatched.filter((item) => item.watchedCount > 0);
 
       const movieData = {};
       const watchedData = {};
       await Promise.all(
-        withUnwatched.map(async (item) => {
+        allUnwatched.map(async (item) => {
           const [movies, watched] = await Promise.all([
             getListMovies(item.listId),
             getWatchedMovies(uid, item.listId),
@@ -287,13 +328,53 @@ export default function UserProfile() {
         setNewInLists({ movie: top.movie, listTitle: top.listTitle, listId: top.listId });
       }
 
-      // Watchlist tile: show a random film from the user's Watchlist if it has
-      // any. Independent of watched state — the watchlist is a "save for later"
-      // surface, not a progress tracker.
-      if (watchlistEntry && (watchlistEntry.list.movieCount || 0) > 0) {
-        const wlMovies = await getListMovies(watchlistId);
-        if (wlMovies.length > 0) {
-          setWatchlistItem({ movie: pickRandom(wlMovies), listId: watchlistId });
+      // This week's pick: stable per ISO week, persisted to localStorage so
+      // the user sees the same movie all week even after watching it. Draws
+      // from any list with unwatched movies, including the Watchlist.
+      const weekKey = getWeekKey();
+      const storageKey = weekPickStorageKey(user.uid);
+      let pick = null;
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const fresh = parsed?.weekKey === weekKey && parsed.movie?.tmdbId;
+          // Self-heal: if the cached pick references a list the user is no
+          // longer in (left/deleted), regenerate instead of showing stale info.
+          const listStillValid =
+            parsed?.listId && validLists.some((v) => v.listId === parsed.listId);
+          if (fresh && listStillValid) pick = parsed;
+        }
+      } catch { /* corrupt entry — regenerate */ }
+
+      if (!pick) {
+        const shuffledLists = [...allUnwatched].sort(() => Math.random() - 0.5);
+        for (const item of shuffledLists) {
+          const candidates = (movieData[item.listId] || [])
+            .filter((m) => !watchedData[item.listId]?.[m.tmdbId])
+            .filter(isReleased);
+          if (candidates.length > 0) {
+            const movie = pickRandom(candidates);
+            pick = {
+              weekKey,
+              movie,
+              listTitle: item.list?.title || '',
+              listId: item.listId || '',
+            };
+            try { localStorage.setItem(storageKey, JSON.stringify(pick)); } catch { /* quota — ignore */ }
+            break;
+          }
+        }
+      }
+
+      if (pick) {
+        setWeekPick(pick);
+        const ids = await getAllWatchedTmdbIds(user.uid).catch(() => new Set());
+        if (ids.has(pick.movie.tmdbId)) {
+          try {
+            const info = await getWatchedInfo(user.uid, pick.movie.tmdbId);
+            if (info) setWeekPickReview(info);
+          } catch { /* non-fatal */ }
         }
       }
     }
@@ -465,16 +546,69 @@ export default function UserProfile() {
             </div>
 
             {/* Suggestion tiles — owner only */}
-            {isOwner && (continueItem || startWatching || almostDone || watchlistItem) && (
+            {isOwner && (continueItem || startWatching || almostDone || weekPick) && (
               <div className="space-y-3">
-                {watchlistItem && (
-                  <SuggestionCard
-                    movie={watchlistItem.movie}
-                    label={<><span className="text-white">On your</span> Watchlist</>}
-                    labelColor="text-pink-400"
-                    to={`/lists/${watchlistItem.listId}`}
-                  />
-                )}
+                {weekPick && (() => {
+                  const pickWatched = myWatchedIds.has(weekPick.movie.tmdbId);
+                  return (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                        {pickWatched ? "You watched this week's pick" : 'Not sure what to watch?'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setQuickActionMovie(weekPick.movie)}
+                        className="block w-full text-left group"
+                      >
+                        <div
+                          className={
+                            pickWatched
+                              ? 'relative rounded-xl overflow-hidden bg-gray-900 border border-orange-500 shadow-[0_0_30px_-5px_rgba(249,115,22,0.6)] transition-colors'
+                              : 'relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 group-hover:border-purple-500 transition-colors'
+                          }
+                        >
+                          {weekPick.movie.posterPath ? (
+                            <div
+                              className="absolute inset-0 bg-cover bg-center opacity-20 blur-xl"
+                              style={{ backgroundImage: `url(${posterUrl(weekPick.movie.posterPath, 'w500')})` }}
+                            />
+                          ) : null}
+                          <div className="relative flex items-center gap-4 p-3">
+                            {weekPick.movie.posterPath ? (
+                              <img
+                                src={posterUrl(weekPick.movie.posterPath, 'w185')}
+                                alt={weekPick.movie.title}
+                                className="w-16 h-24 rounded object-cover shrink-0 shadow-lg"
+                              />
+                            ) : (
+                              <div className="w-16 h-24 rounded bg-gray-800 shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-medium mb-0.5 ${pickWatched ? 'text-orange-400' : 'text-yellow-400/90'}`}>
+                                {pickWatched ? '🍿 Your pick this week' : "🎬 This week's pick"}
+                              </p>
+                              <p className="text-white font-medium truncate">
+                                {weekPick.movie.title}
+                                {weekPick.movie.year && (
+                                  <span className="text-gray-400 font-normal"> ({weekPick.movie.year})</span>
+                                )}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">from {weekPick.listTitle}</p>
+                              {pickWatched && weekPickReview && (weekPickReview.rating || weekPickReview.note) && (
+                                <div className="mt-2">
+                                  {weekPickReview.rating > 0 && <StarRating value={weekPickReview.rating} size="sm" />}
+                                  {weekPickReview.note && (
+                                    <p className="text-gray-300 text-xs italic mt-1 line-clamp-2">"{weekPickReview.note}"</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })()}
                 {continueItem && (
                   <SuggestionCard
                     movie={continueItem.movie}
@@ -571,6 +705,17 @@ export default function UserProfile() {
         >
           Sign out
         </button>
+      )}
+
+      {user && (
+        <QuickActionModal
+          isOpen={!!quickActionMovie}
+          onClose={() => setQuickActionMovie(null)}
+          movie={quickActionMovie}
+          user={user}
+          watched={myWatchedIds}
+          setWatched={setMyWatchedIds}
+        />
       )}
 
       {user ? (
