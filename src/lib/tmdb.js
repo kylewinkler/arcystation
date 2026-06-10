@@ -128,6 +128,25 @@ export async function discoverMovies({ tab = 'popular', genre, year, page = 1 } 
   return result;
 }
 
+export async function getTmdbCollection(collectionId) {
+  const res = await fetch(`${BASE_URL}/collection/${collectionId}?api_key=${API_KEY}`);
+  if (!res.ok) throw new Error(`TMDB collection ${collectionId}: HTTP ${res.status}`);
+  const data = await res.json();
+  return mapMovieResults(data.parts || []);
+}
+
+export async function discoverMoviesByCompany(companyId, { pages = 1 } = {}) {
+  const all = [];
+  for (let p = 1; p <= pages; p++) {
+    const url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_companies=${companyId}&sort_by=popularity.desc&include_adult=false&page=${p}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`TMDB discover (company ${companyId}): HTTP ${res.status}`);
+    const data = await res.json();
+    all.push(...mapMovieResults(data.results || []));
+  }
+  return all;
+}
+
 export async function getRecommendations(tmdbId) {
   const res = await fetch(`${BASE_URL}/movie/${tmdbId}/recommendations?api_key=${API_KEY}`);
   const data = await res.json();

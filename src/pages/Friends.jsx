@@ -83,8 +83,21 @@ export default function Friends() {
     setPending(pendingWithProfiles);
     setSuggested(suggestions);
 
+    // Dedupe watched_movie notifications by (friend, movie): when a friend
+    // updates or re-submits a review, only keep the most recent one. notifs
+    // are already sorted newest-first, so the first occurrence wins.
+    const seenReviews = new Set();
     const feedItems = notifs
       .filter((n) => n.type !== 'friend_request')
+      .filter((n) => {
+        if (n.type !== 'watched_movie') return true;
+        const tmdbId = n.data?.tmdbId;
+        if (!tmdbId) return true;
+        const key = `${n.fromUid}__${tmdbId}`;
+        if (seenReviews.has(key)) return false;
+        seenReviews.add(key);
+        return true;
+      })
       .slice(0, FEED_MAX);
     setFeed(feedItems);
     setFeedLimit(FEED_PAGE_SIZE);

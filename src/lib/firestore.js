@@ -66,6 +66,73 @@ export async function createList({ title, description, createdBy }) {
   return ref.id;
 }
 
+export async function createPrebuiltCollection({ slug, title, description, movies, createdBy }) {
+  const listId = `prebuilt__${slug}`;
+  const listRef = doc(db, 'lists', listId);
+  const existing = await getDoc(listRef);
+
+  if (existing.exists()) {
+    await updateDoc(listRef, {
+      title,
+      description,
+      isPrebuilt: true,
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    await setDoc(listRef, {
+      title,
+      description,
+      createdBy,
+      isPrebuilt: true,
+      movieCount: 0,
+      isPublic: true,
+      shareSlug: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  const existingMoviesSnap = await getDocs(collection(db, 'lists', listId, 'movies'));
+  const existingIds = new Set(existingMoviesSnap.docs.map((d) => d.id));
+
+  const seen = new Set();
+  const uniqueMovies = movies.filter((m) => {
+    const id = m?.tmdbId ? String(m.tmdbId) : null;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  let firstPoster = existing.exists() ? existing.data().firstPoster || null : null;
+  let added = 0;
+  let order = existingIds.size;
+  for (const m of uniqueMovies) {
+    const id = String(m.tmdbId);
+    if (existingIds.has(id)) continue;
+    await setDoc(doc(db, 'lists', listId, 'movies', id), {
+      title: m.title,
+      posterPath: m.posterPath || null,
+      year: m.year || '',
+      releaseDate: m.releaseDate || null,
+      overview: m.overview || '',
+      order: order++,
+      ...(m.genreIds?.length > 0 && { genreIds: m.genreIds }),
+      addedAt: serverTimestamp(),
+    });
+    if (!firstPoster && m.posterPath) firstPoster = m.posterPath;
+    added++;
+  }
+
+  await updateDoc(listRef, {
+    movieCount: existingIds.size + added,
+    ...(firstPoster && { firstPoster }),
+    updatedAt: serverTimestamp(),
+  });
+  invalidateListCache(listId);
+
+  return { listId, total: existingIds.size + added, added };
+}
+
 export async function copyList(sourceListId, newOwnerId) {
   const sourceSnap = await getDoc(doc(db, 'lists', sourceListId));
   if (!sourceSnap.exists()) throw new Error('Source list not found');
@@ -1303,8 +1370,28 @@ export async function createNotification(type, fromUid, toUid, data = {}) {
 export async function notifyFriends(uid, type, data = {}) {
   const friendUids = await getFriends(uid);
   await Promise.all(
-    friendUids.map((friendUid) => createNotification(type, uid, friendUid, data))
+    friendUids.map(async (friendUid) => {
+      if (type === 'watched_movie' && data?.tmdbId != null) {
+        await deletePriorWatchedMovieNotifications(uid, friendUid, data.tmdbId);
+      }
+      return createNotification(type, uid, friendUid, data);
+    })
   );
+}
+
+async function deletePriorWatchedMovieNotifications(fromUid, toUid, tmdbId) {
+  const q = query(
+    collection(db, 'notifications'),
+    where('toUid', '==', toUid),
+    where('fromUid', '==', fromUid),
+    where('type', '==', 'watched_movie'),
+    where('data.tmdbId', '==', tmdbId)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return;
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
 }
 
 export async function getNotifications(uid) {

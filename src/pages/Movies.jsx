@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { searchMovies, discoverMovies } from '../lib/tmdb';
 import {
@@ -54,17 +54,36 @@ function getSavedState() {
 export default function Movies() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Inbound navigation can force a specific section/pill via Link state —
+  // e.g. "View more" on Home's Popular Right Now sends users to the Movies
+  // section + Popular pill no matter what their session-saved preference was.
+  const forcedSection = location.state?.section;
+  const forcedPill = location.state?.pill;
+  const hasForceOverride = !!forcedSection;
 
   const [restored] = useState(() => getSavedState());
-  const didRestore = !!restored?.movies?.length;
+  // When a section is forced, ignore any restored movie list — it belongs to
+  // a different section/pill and would flash the wrong content while we wait
+  // for the fresh fetch to land.
+  const didRestore = !hasForceOverride && !!restored?.movies?.length;
   const hasRestoredScroll = useRef(false);
 
-  const [section, setSection] = useState(restored?.section || null);
-  const [moviesPill, setMoviesPill] = useState(restored?.moviesPill || 'popular');
-  const [reviewsPill, setReviewsPill] = useState(restored?.reviewsPill || 'latest_reviewed');
-  const [movies, setMovies] = useState(restored?.movies || []);
-  const [loading, setLoading] = useState(!didRestore);
-  const [search, setSearch] = useState(restored?.search || '');
+  const [section, setSection] = useState(forcedSection || restored?.section || null);
+  const [moviesPill, setMoviesPill] = useState(
+    forcedSection === 'movies' && forcedPill
+      ? forcedPill
+      : (restored?.moviesPill || 'popular')
+  );
+  const [reviewsPill, setReviewsPill] = useState(
+    forcedSection === 'reviews' && forcedPill
+      ? forcedPill
+      : (restored?.reviewsPill || 'latest_reviewed')
+  );
+  const [movies, setMovies] = useState(hasForceOverride ? [] : (restored?.movies || []));
+  const [loading, setLoading] = useState(hasForceOverride || !restored?.movies?.length);
+  const [search, setSearch] = useState(hasForceOverride ? '' : (restored?.search || ''));
   const [watched, setWatched] = useState(new Set());
   const searchDebounce = useRef(null);
   const mountedRef = useRef(false);

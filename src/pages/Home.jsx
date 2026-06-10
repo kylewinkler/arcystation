@@ -242,7 +242,13 @@ export default function Home() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-white">Popular Right Now</h2>
-            <Link to="/movies" className="text-xs text-purple-400 hover:text-purple-300">View more →</Link>
+            <Link
+              to="/movies"
+              state={{ section: 'movies', pill: 'popular' }}
+              className="text-xs text-purple-400 hover:text-purple-300"
+            >
+              View more →
+            </Link>
           </div>
           <div className="grid grid-cols-5 gap-3">
             {popularMovies.slice(0, 5).map((m) => (
